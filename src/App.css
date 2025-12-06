@@ -265,3 +265,86 @@
   font-size: 0.8rem;
   opacity: 0.8;
 }
+
+/* Auth Component Styles */
+.auth-container {
+  max-width: 450px;
+  margin: 0 auto;
+}
+
+.auth-container .card {
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.auth-container .card-header {
+  border-radius: 12px 12px 0 0 !important;
+}
+
+.auth-container .form-control {
+  padding: 12px 15px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  transition: all 0.3s;
+}
+
+.auth-container .form-control:focus {
+  border-color: #0d6efd;
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.auth-container .btn-primary {
+  background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+  border: none;
+  border-radius: 8px;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+
+.auth-container .btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+}
+
+.auth-container .btn-link {
+  color: #0d6efd;
+}
+
+.auth-container .alert {
+  border-radius: 8px;
+  border: none;
+}
+
+/* User info in header */
+.user-info {
+  background: rgba(255, 255, 255, 0.1);
+  padding: 10px 15px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+}
+
+.user-email {
+  font-size: 0.9rem;
+  opacity: 0.9;
+}
+
+.user-avatar {
+  background: rgba(255, 255, 255, 0.2);
+  width: 45px;
+  height: 45px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Temporary debug banner */
+.debug-banner {
+  font-size: 0.75rem;
+  border-bottom: 1px solid #444;
+}
+
+.debug-banner .btn {
+  font-size: 0.7rem;
+  padding: 2px 8px;
+}
