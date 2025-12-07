@@ -1,18 +1,20 @@
 import React, { useState, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // ADD THIS IMPORT
 import { PropertyComparison } from './components';
 import Auth from './components/Auth';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import './App.css';
 import config from './config';
-import { auth } from './firebase'; // Make sure this is imported
-import { onAuthStateChanged } from 'firebase/auth'; // ADD THIS IMPORT
+import { auth } from './firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import EmailVerification from './pages/EmailVerification';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false);
 
-  // 🔍 TEMPORARY DEBUG LOGS - ADD THIS EFFECT
+  // 🔍 TEMPORARY DEBUG LOGS
   useEffect(() => {
     console.log('=== ENVIRONMENT DEBUG LOGS ===');
     console.log('Node Environment:', process.env.NODE_ENV);
@@ -32,7 +34,6 @@ function App() {
   useEffect(() => {
     config.logConfig();
     
-    // 🔍 TEMPORARY: Log Firebase auth object
     console.log('Firebase Auth Object:', auth ? '✓ Loaded' : '✗ Missing');
     console.log('Firebase App Name:', auth?.app?.name || 'Unknown');
     
@@ -44,7 +45,6 @@ function App() {
       if (currentUser) {
         setEmailVerified(currentUser.emailVerified);
         
-        // 🔍 TEMPORARY: Log user details
         console.log('User Details:', {
           email: currentUser.email,
           emailVerified: currentUser.emailVerified,
@@ -64,7 +64,6 @@ function App() {
       
       setLoading(false);
     }, (error) => {
-      // 🔍 TEMPORARY: Log auth errors
       console.error('🔥 Firebase Auth Error:', error);
       console.error('Error Code:', error.code);
       console.error('Error Message:', error.message);
@@ -77,10 +76,8 @@ function App() {
     };
   }, []);
 
-  // 🔍 TEMPORARY: Add import for signOut
   const handleSignOut = async () => {
     try {
-      // Import signOut if not already imported
       const { signOut } = await import('firebase/auth');
       await signOut(auth);
       setEmailVerified(false);
@@ -98,7 +95,6 @@ function App() {
             <span className="visually-hidden">Loading...</span>
           </div>
           <p className="mt-3">Loading Property Investment Analyzer...</p>
-          {/* 🔍 TEMPORARY: Show debug info in loading state */}
           <small className="text-muted d-block mt-2">
             Environment: {process.env.NODE_ENV} | 
             Firebase: {auth ? 'Initialized' : 'Loading...'}
@@ -108,9 +104,10 @@ function App() {
     );
   }
 
-  return (
+  // Main App Content Component
+  const MainAppContent = () => (
     <div className="App">
-      {/* 🔍 TEMPORARY: Debug banner (remove after testing) */}
+      {/* 🔍 TEMPORARY: Debug banner */}
       {process.env.NODE_ENV === 'development' && (
         <div className="debug-banner bg-dark text-white py-1 small">
           <div className="container">
@@ -155,7 +152,6 @@ function App() {
                   <span className="badge bg-info">v{config.version}</span>
                   {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
                   {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
-                  {/* 🔍 TEMPORARY: Show env var status */}
                   <span className="badge bg-secondary ms-2">
                     <i className={`fas ${process.env.REACT_APP_FIREBASE_API_KEY ? 'fa-check' : 'fa-times'} me-1`}></i>
                     Firebase
@@ -209,7 +205,6 @@ function App() {
               <button 
                 className="btn btn-sm btn-outline-dark"
                 onClick={() => {
-                  // 🔍 TEMPORARY: Log resend attempt
                   console.log('🔄 Attempting to resend verification email to:', user.email);
                   alert('Resend verification email function would go here');
                 }}
@@ -239,7 +234,6 @@ function App() {
                       className="btn btn-primary me-2"
                       onClick={() => {
                         console.log('🔄 Manual resend requested for:', user.email);
-                        // Implement resend logic here
                       }}
                     >
                       <i className="fas fa-redo me-1"></i> Resend Verification Email
@@ -263,7 +257,6 @@ function App() {
                       <i className="fas fa-lock me-2"></i>
                       Sign In Required
                     </h3>
-                    {/* 🔍 TEMPORARY: Debug info in card */}
                     <small className="opacity-75">
                       Firebase: {auth ? 'Ready' : 'Loading...'}
                     </small>
@@ -279,7 +272,6 @@ function App() {
                     <Auth />
                     <div className="mt-4 text-center text-muted small">
                       <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
-                      {/* 🔍 TEMPORARY: Environment info */}
                       {process.env.NODE_ENV === 'development' && (
                         <small className="text-info">
                           <i className="fas fa-info-circle me-1"></i>
@@ -303,12 +295,25 @@ function App() {
             Currency: {config.currency}
             {user && ` • Logged in as: ${user.email}`}
             {user && ` • Email Status: ${emailVerified ? 'Verified' : 'Pending Verification'}`}
-            {/* 🔍 TEMPORARY: Add build info */}
             {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
           </small>
         </div>
       </footer>
     </div>
+  );
+
+  return (
+    <Router>
+      <Routes>
+        {/* Main App Route - shows your entire dashboard */}
+        <Route path="/" element={<MainAppContent />} />
+        
+        {/* Email Verification Route */}
+        <Route path="/verify-email" element={<EmailVerification />} />
+        
+        {/* You can add more routes here if needed */}
+      </Routes>
+    </Router>
   );
 }
 
