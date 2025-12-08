@@ -2,7 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyC2qtcM_eiroC6ZGCbCkrR6R4LX0BThvQM",
+  apiKey: "AIzaSyBKBmioKtp_jd2hKrG62MlVRPMT07Rk8Ls",
   authDomain: "property-investment-anal-a3b3d.firebaseapp.com",
   projectId: "property-investment-anal-a3b3d",
   storageBucket: "property-investment-anal-a3b3d.firebasestorage.app",
