@@ -3,6 +3,7 @@ import './PropertyComparison.css';
 
 const PropertyComparison = () => {
   // ===================== STATE =====================
+  const [isDarkTheme, setIsDarkTheme] = useState(false);
   const [propertyData, setPropertyData] = useState({
     purchasePrice: 4400,
     exitPrices: [6000, 7000, 8000],
@@ -65,6 +66,15 @@ const PropertyComparison = () => {
   const [activeTab, setActiveTab] = useState('inputs');
   const [showDataEnteredAlert, setShowDataEnteredAlert] = useState(false);
 
+  // ===================== THEME MANAGEMENT =====================
+  useEffect(() => {
+    if (isDarkTheme) {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+  }, [isDarkTheme]);
+
   // ===================== CALCULATION FUNCTIONS =====================
   
   const calculateEMI = useCallback((principal, annualRate, years) => {
@@ -114,7 +124,6 @@ const PropertyComparison = () => {
     return interestPaid;
   }, [calculateEMI]);
 
-  // NEW: Calculate Monthly IDC EMI
   const calculateMonthlyIDCEMI = useCallback((homeLoanAmount, annualRate, constructionMonths) => {
     if (!homeLoanAmount || homeLoanAmount === 0 || constructionMonths <= 0) return 0;
     
@@ -161,7 +170,7 @@ const PropertyComparison = () => {
     const totalCashInvested = downPaymentAmount + personalLoan1Amount + personalLoan2Amount;
     
     let totalIDC = 0;
-    let monthlyIDCEMI = 0; // NEW: Monthly IDC EMI
+    let monthlyIDCEMI = 0;
     
     if (paymentPlan === 'clp' && homeLoanAmount > 0) {
       const constructionEndMonth = assumptions.clpDurationYears * 12;
@@ -184,7 +193,6 @@ const PropertyComparison = () => {
         }
       });
       
-      // NEW: Calculate Monthly IDC EMI
       monthlyIDCEMI = calculateMonthlyIDCEMI(homeLoanAmount, assumptions.homeLoanRate, constructionEndMonth);
     }
     
@@ -273,15 +281,12 @@ const PropertyComparison = () => {
     
     const roi = totalCashInvested > 0 ? (netGainLoss / totalCashInvested) * 100 : 0;
     
-    // NEW: Calculate monthly payment timelines with Monthly IDC EMI
     const prePossessionMonths = assumptions.possessionMonths;
     const postPossessionMonths = totalHoldingMonths - assumptions.possessionMonths;
     
-    // Pre-possession: PL1 EMI + Monthly IDC EMI
     const prePossessionEMI = personalLoan1EMI + monthlyIDCEMI;
     const prePossessionTotal = prePossessionEMI * prePossessionMonths;
     
-    // Post-possession: HL + PL1 + PL2 EMIs
     const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
     const postPossessionTotal = postPossessionEMI * postPossessionMonths;
     
@@ -307,7 +312,7 @@ const PropertyComparison = () => {
       
       totalInterestPaid,
       totalIDC,
-      monthlyIDCEMI, // NEW: Added monthly IDC EMI
+      monthlyIDCEMI,
       homeLoanInterestPaid,
       personalLoan1InterestPaid,
       personalLoan2InterestPaid,
@@ -350,7 +355,6 @@ const PropertyComparison = () => {
       
       totalHoldingMonths,
       
-      // Monthly payment timeline data
       prePossessionMonths,
       postPossessionMonths,
       prePossessionEMI,
@@ -358,14 +362,12 @@ const PropertyComparison = () => {
       prePossessionTotal,
       postPossessionTotal,
       
-      // Detailed EMI breakdown for display
       prePossessionComponents: {
         pl1EMI: personalLoan1EMI,
         monthlyIDCEMI: monthlyIDCEMI,
         total: prePossessionEMI
       },
       
-      // Construction period data
       constructionMonths: paymentPlan === 'clp' ? assumptions.clpDurationYears * 12 : 0,
       hasIDC: totalIDC > 0
     };
@@ -429,17 +431,14 @@ const PropertyComparison = () => {
     const exitPrice = userSelections.selectedExitPrice;
     const years = userSelections.selectedYears;
     
-    // Calculate main breakdown
     const detailedBreakdown = calculateFinancials(propertySize, exitPrice, years);
     
-    // Calculate scenario breakdown
     const scenarioBreakdown = calculateFinancials(
       userSelections.scenarioSize, 
       userSelections.scenarioExitPrice, 
       years
     );
     
-    // Calculate profits for different exit prices - FIXED: Use dynamic exitPrices
     const profits = propertyData.exitPrices.map(price => {
       const breakdown = calculateFinancials(propertySize, price, years);
       const roi = breakdown.totalCashInvested > 0 ? (breakdown.netGainLoss / breakdown.totalCashInvested) * 100 : 0;
@@ -456,7 +455,6 @@ const PropertyComparison = () => {
       };
     });
 
-    // Calculate multiple scenarios - FIXED: Use scenarioExitPrices
     const multipleScenarios = userSelections.scenarioExitPrices.map(price => {
       const breakdown = calculateFinancials(propertySize, price, years);
       const roi = breakdown.totalCashInvested > 0 ? (breakdown.netGainLoss / breakdown.totalCashInvested) * 100 : 0;
@@ -634,7 +632,7 @@ const PropertyComparison = () => {
     return (
       <div className="mb-5">
         <div className="glass-card mb-4">
-          <div className="card-header bg-gradient-primary text-Black">
+          <div className="card-header bg-gradient-primary">
             <h4 className="mb-0">
               <i className="bi bi-input-cursor me-2"></i>
               Step 1: Input Your Investment Parameters
@@ -1200,7 +1198,7 @@ const PropertyComparison = () => {
 
         {/* Stage Calculations Cards */}
         <div className="glass-card mt-4">
-          <div className="card-header bg-gradient-info text-white">
+          <div className="card-header bg-gradient-info">
             <h5 className="mb-0">
               <i className="bi bi-calculator me-2"></i>
               Stage-wise Calculations
@@ -1410,9 +1408,9 @@ const PropertyComparison = () => {
           </div>
         </div>
 
-        {/* Comparison Table - FIXED: Now uses calculatedData.profits which updates dynamically */}
+        {/* Comparison Table */}
         <div className="glass-card mb-5">
-          <div className="card-header bg-gradient-primary text-black">
+          <div className="card-header bg-gradient-primary">
             <h5 className="mb-0">
               <i className="bi bi-table me-2"></i>
               Exit Price Comparison
@@ -1458,9 +1456,9 @@ const PropertyComparison = () => {
           </div>
         </div>
 
-        {/* Payment Plan Summary - UPDATED: Smaller bars */}
+        {/* Payment Plan Summary */}
         <div className="glass-card mb-5">
-          <div className="card-header bg-gradient-info text-black">
+          <div className="card-header bg-gradient-info">
             <h5 className="mb-0">
               <i className="bi bi-pie-chart me-2"></i>
               Payment Plan Breakdown
@@ -1590,8 +1588,8 @@ const PropertyComparison = () => {
             >
               <i className="bi bi-pencil-square me-3 fs-5"></i>
               <div className="text-start">
-                <div className="fw-bold text-white opacity-75">Edit Parameters</div>
-                <small className="text-white opacity-75">Modify inputs</small>
+                <div className="fw-bold">Edit Parameters</div>
+                <small className="opacity-75">Modify inputs</small>
               </div>
             </button>
           </div>
@@ -1625,7 +1623,7 @@ const PropertyComparison = () => {
     return (
       <div className="mb-5">
         <div className="glass-card mb-4">
-          <div className="card-header bg-gradient-info text-blue d-flex justify-content-between align-items-center">
+          <div className="card-header bg-gradient-info d-flex justify-content-between align-items-center">
             <div>
               <h4 className="mb-0">
                 <i className="bi bi-calculator me-2"></i>
@@ -1643,7 +1641,7 @@ const PropertyComparison = () => {
           </div>
           <div className="card-body">
             
-            {/* Monthly EMI Timeline Visualization - UPDATED with Monthly IDC EMI */}
+            {/* Monthly EMI Timeline Visualization */}
             <div className="row mb-4">
               <div className="col-12">
                 <h5 className="mb-3">
@@ -1651,7 +1649,7 @@ const PropertyComparison = () => {
                   Monthly EMI Timeline
                 </h5>
                 <div className="row g-3">
-                  {/* Timeline 1: Pre-Possession - UPDATED with Monthly IDC EMI */}
+                  {/* Timeline 1: Pre-Possession */}
                   <div className="col-md-6">
                     <div className="card h-100 border-primary">
                       <div className="card-header bg-primary text-white">
@@ -1998,7 +1996,7 @@ const PropertyComparison = () => {
               </div>
             )}
 
-            {/* Multiple Exit Price Scenarios - FIXED: Now shows dynamic scenarios */}
+            {/* Multiple Exit Price Scenarios */}
             <div className="row mb-4">
               <div className="col-12">
                 <div className="p-3 bg-light rounded">
@@ -2167,7 +2165,7 @@ const PropertyComparison = () => {
               </div>
             </div>
 
-            {/* Scenario Comparison - FIXED: Now shows comparison */}
+            {/* Scenario Comparison */}
             {calculatedData.scenarioBreakdown && (
               <div className="row mt-4">
                 <div className="col-12">
@@ -2244,6 +2242,16 @@ const PropertyComparison = () => {
     );
   };
 
+  const renderThemeToggle = () => (
+    <button
+      className="btn btn-outline-secondary btn-sm"
+      onClick={() => setIsDarkTheme(!isDarkTheme)}
+    >
+      <i className={`bi ${isDarkTheme ? 'bi-sun' : 'bi-moon'}`}></i>
+      {isDarkTheme ? ' Light Theme' : ' Dark Theme'}
+    </button>
+  );
+
   const renderTabContent = () => {
     switch(activeTab) {
       case 'inputs':
@@ -2272,10 +2280,14 @@ const PropertyComparison = () => {
             
             {/* Main Header */}
             <div className="text-center mb-4 pt-3">
-              <h1 className="display-5 fw-bold text-white mb-2">
-                <i className="bi bi-graph-up-arrow me-3"></i>
-                Property Investment Analyzer
-              </h1>
+              <div className="d-flex justify-content-between align-items-center mb-3">
+                <div></div>
+                <h1 className="display-5 fw-bold text-white mb-0">
+                  <i className="bi bi-graph-up-arrow me-3"></i>
+                  Property Investment Analyzer
+                </h1>
+                <div>{renderThemeToggle()}</div>
+              </div>
               <p className="lead text-light opacity-90 mb-4">
                 Comprehensive tool for real estate investment analysis
               </p>

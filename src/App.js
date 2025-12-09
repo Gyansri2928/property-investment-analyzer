@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'; // ADD THIS IMPORT
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { PropertyComparison } from './components';
 import Auth from './components/Auth';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -8,6 +8,8 @@ import config from './config';
 import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import EmailVerification from './pages/EmailVerification';
+import MiniWeather from './components/MiniWeather';
+import ThemeToggle from './components/ThemeToggle'; 
 
 function App() {
   const [user, setUser] = useState(null);
@@ -104,7 +106,7 @@ function App() {
     );
   }
 
-  // Main App Content Component
+// Main App Content Component
   const MainAppContent = () => (
     <div className="App">
       {/* 🔍 TEMPORARY: Debug banner */}
@@ -160,35 +162,45 @@ function App() {
               </div>
             </div>
             
-            {user && (
-              <div className="user-info ms-auto">
-                <div className="d-flex align-items-center">
-                  <div className="me-3 text-end">
-                    <div className="user-email text-light small">
-                      {user.email}
-                      {emailVerified ? (
-                        <span className="badge bg-success ms-2">
-                          <i className="fas fa-check-circle me-1"></i>Verified
-                        </span>
-                      ) : (
-                        <span className="badge bg-warning ms-2">
-                          <i className="fas fa-exclamation-circle me-1"></i>Unverified
-                        </span>
-                      )}
+            {/* RIGHT SIDE: Theme Toggle + Mini Weather + User Info */}
+            <div className="d-flex align-items-center gap-3">
+              {/* Theme Toggle */}
+              <ThemeToggle />
+              
+              {/* Mini Weather Widget */}
+              <MiniWeather />
+              
+              {/* User Info */}
+              {user && (
+                <div className="user-info">
+                  <div className="d-flex align-items-center">
+                    <div className="me-3 text-end">
+                      <div className="user-email text-light small">
+                        {user.email}
+                        {emailVerified ? (
+                          <span className="badge bg-success ms-2">
+                            <i className="fas fa-check-circle me-1"></i>Verified
+                          </span>
+                        ) : (
+                          <span className="badge bg-warning ms-2">
+                            <i className="fas fa-exclamation-circle me-1"></i>Unverified
+                          </span>
+                        )}
+                      </div>
+                      <button 
+                        onClick={handleSignOut}
+                        className="btn btn-sm btn-outline-light mt-1"
+                      >
+                        <i className="fas fa-sign-out-alt me-1"></i> Sign Out
+                      </button>
                     </div>
-                    <button 
-                      onClick={handleSignOut}
-                      className="btn btn-sm btn-outline-light mt-1"
-                    >
-                      <i className="fas fa-sign-out-alt me-1"></i> Sign Out
-                    </button>
-                  </div>
-                  <div className="user-avatar">
-                    <i className="fas fa-user-circle fa-2x text-light"></i>
+                    <div className="user-avatar">
+                      <i className="fas fa-user-circle fa-2x text-light"></i>
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -221,7 +233,12 @@ function App() {
           {user ? (
             <>
               {emailVerified ? (
-                <PropertyComparison />
+                // ✅ FULL WIDTH Property Comparison (no sidebar)
+                <div className="row">
+                  <div className="col-12">
+                    <PropertyComparison />
+                  </div>
+                </div>
               ) : (
                 <div className="alert alert-warning mt-4">
                   <h4><i className="fas fa-envelope me-2"></i>Email Verification Required</h4>
@@ -302,16 +319,11 @@ function App() {
     </div>
   );
 
-  return (
+   return (
     <Router>
       <Routes>
-        {/* Main App Route - shows your entire dashboard */}
         <Route path="/" element={<MainAppContent />} />
-        
-        {/* Email Verification Route */}
         <Route path="/verify-email" element={<EmailVerification />} />
-        
-        {/* You can add more routes here if needed */}
       </Routes>
     </Router>
   );

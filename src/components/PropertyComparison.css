@@ -270,3 +270,158 @@
   color: #495057;
   font-size: 0.85rem;
 }
+
+/* Dark Theme Overrides */
+.dark-theme {
+    background-color: #121212 !important;
+    color: #f8f9fa !important;
+}
+
+.dark-theme .property-comparison {
+    background-color: #121212 !important;
+}
+
+.dark-theme .glass-card {
+    background: rgba(30, 30, 40, 0.8) !important;
+    color: #f8f9fa !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-theme .card {
+    background-color: rgba(40, 40, 50, 0.9) !important;
+    color: #f8f9fa !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-theme .card-header {
+    color: #f8f9fa !important;
+    border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-theme .form-control,
+.dark-theme .form-select,
+.dark-theme .input-group-text {
+    background-color: rgba(50, 50, 60, 0.9) !important;
+    color: #f8f9fa !important;
+    border-color: #495057 !important;
+}
+
+.dark-theme .form-control:focus,
+.dark-theme .form-select:focus {
+    background-color: rgba(60, 60, 70, 0.9) !important;
+    color: #f8f9fa !important;
+    border-color: #0d6efd !important;
+}
+
+.dark-theme .form-control.bg-light {
+    background-color: rgba(70, 70, 80, 0.9) !important;
+    color: #f8f9fa !important;
+}
+
+.dark-theme .bg-light {
+    background-color: rgba(60, 60, 70, 0.9) !important;
+    color: #f8f9fa !important;
+}
+
+.dark-theme .alert {
+    background-color: rgba(40, 40, 50, 0.9) !important;
+    color: #f8f9fa !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-theme .alert-info {
+    background-color: rgba(25, 50, 70, 0.9) !important;
+}
+
+.dark-theme .alert-warning {
+    background-color: rgba(70, 60, 25, 0.9) !important;
+}
+
+.dark-theme .alert-success {
+    background-color: rgba(25, 60, 40, 0.9) !important;
+}
+
+.dark-theme .table {
+    color: #f8f9fa !important;
+}
+
+.dark-theme .table.table-hover tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.075) !important;
+}
+
+.dark-theme .table-bordered {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-theme .table-bordered th,
+.dark-theme .table-bordered td {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-theme .text-muted {
+    color: #adb5bd !important;
+}
+
+.dark-theme .text-white {
+    color: #f8f9fa !important;
+}
+
+.dark-theme .text-body {
+    color: #f8f9fa !important;
+}
+
+.dark-theme .progress {
+    background-color: rgba(70, 70, 80, 0.5) !important;
+}
+
+.dark-theme .btn-outline-primary {
+    color: #0d6efd !important;
+    border-color: #0d6efd !important;
+}
+
+.dark-theme .btn-outline-primary:hover {
+    background-color: #0d6efd !important;
+    color: #fff !important;
+}
+
+.dark-theme .btn-light {
+    background-color: rgba(60, 60, 70, 0.9) !important;
+    color: #f8f9fa !important;
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.dark-theme .btn-light:hover {
+    background-color: rgba(80, 80, 90, 0.9) !important;
+}
+
+/* Ensure gradient headers are visible */
+.dark-theme .card-header.bg-gradient-primary {
+    background: linear-gradient(45deg, #667eea 0%, #764ba2 100%) !important;
+}
+
+.dark-theme .card-header.bg-gradient-info {
+    background: linear-gradient(45deg, #4facfe 0%, #00f2fe 100%) !important;
+}
+
+.dark-theme .card-header.bg-gradient-success {
+    background: linear-gradient(45deg, #43e97b 0%, #38f9d7 100%) !important;
+}
+
+.dark-theme .metric-card {
+    background: rgba(30, 30, 40, 0.8) !important;
+}
+
+/* Fix for form labels */
+.dark-theme .form-label {
+    color: #e9ecef !important;
+}
+
+/* Fix for small text */
+.dark-theme small {
+    color: #adb5bd !important;
+}
+
+/* Fix for badge text */
+.dark-theme .badge {
+    color: #fff !important;
+}

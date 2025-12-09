@@ -348,3 +348,599 @@
   font-size: 0.7rem;
   padding: 2px 8px;
 }
+
+/* Weather Widget Styles */
+.weather-widget {
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+.current-weather .display-1 {
+  font-size: 4rem;
+  line-height: 1;
+}
+
+.forecast-day {
+  transition: all 0.2s;
+  background-color: #f8f9fa;
+}
+
+.forecast-day:hover {
+  background-color: #e9ecef;
+  transform: translateY(-2px);
+}
+
+.weather-info {
+  background-color: #f8f9fa;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .current-weather .display-1 {
+    font-size: 3rem;
+  }
+  
+  .current-weather .display-4 {
+    font-size: 2.5rem;
+  }
+}
+
+/* Sidebar Weather Widget */
+.weather-widget.sidebar {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.weather-stat {
+  background-color: #f8f9fa;
+  font-size: 0.8rem;
+}
+
+.forecast-mini {
+  font-size: 0.75rem;
+  background-color: #f8f9fa;
+}
+
+.weather-widget .card-header {
+  padding: 0.5rem 1rem;
+}
+
+.weather-widget .card-body {
+  padding: 1rem;
+}
+
+/* Compact form controls */
+.weather-widget .form-control-sm {
+  font-size: 0.875rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.weather-widget .btn-sm {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+/* Current weather in sidebar */
+.current-weather .display-6 {
+  font-size: 2.5rem;
+}
+
+/* Responsive: Stack on mobile */
+@media (max-width: 992px) {
+  .sticky-top {
+    position: static !important;
+  }
+  
+  .weather-widget {
+    margin-top: 2rem;
+  }
+}
+
+/* Sidebar Styling */
+.sticky-top {
+  z-index: 100;
+}
+
+/* Responsive sidebar */
+@media (max-width: 600px) {
+  .sticky-top {
+    position: static !important;
+  }
+  
+  .col-lg-4 {
+    margin-top: 2rem;
+  }
+}
+
+/* Tips Card Styling */
+.card.bg-light {
+  background-color: #f8fafc !important;
+  border: 1px solid #e2e8f0;
+}
+
+/* Better spacing */
+.app-main {
+  padding-top: 2rem;
+  padding-bottom: 2rem;
+}
+
+/* Simple Temperature Widget */
+.simple-temperature {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 8px;
+}
+
+.simple-temperature .card-body {
+  padding: 0.75rem;
+}
+
+.simple-temperature .temperature-display {
+  display: flex;
+  align-items: baseline;
+}
+
+.simple-temperature .temperature-display .h5 {
+  color: white;
+  font-weight: 600;
+}
+
+.simple-temperature .location {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.75rem;
+}
+
+.simple-temperature .conditions {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 0.75rem;
+}
+
+.simple-temperature .btn-link {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.simple-temperature .btn-link:hover {
+  color: white;
+  text-decoration: underline;
+}
+
+.simple-temperature .btn-outline-secondary {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.simple-temperature .btn-outline-secondary:hover {
+  background: rgba(255, 255, 255, 0.2);
+  border-color: white;
+}
+
+/* Make it very compact */
+.simple-temperature .weather-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+/* Responsive */
+@media (max-width: 600px) {
+  .simple-temperature {
+    margin-top: 1rem;
+  }
+}
+
+/* Enhanced Simple Temperature Widget */
+.simple-temperature {
+  background: linear-gradient(135deg, #3498db 0%, #2c3e50 100%);
+  color: white;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+
+.simple-temperature:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(52, 152, 219, 0.2);
+}
+
+/* Location Selector */
+.location-selector {
+  position: relative;
+}
+
+.location-dropdown {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  animation: slideDown 0.2s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.location-dropdown .list-group-item {
+  border: none;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.85rem;
+  transition: all 0.2s;
+}
+
+.location-dropdown .list-group-item:hover {
+  background-color: #f8f9fa;
+}
+
+.location-dropdown .list-group-item.active {
+  background-color: #3498db;
+  color: white;
+  border-color: #3498db;
+}
+
+.location-dropdown .input-group {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.location-dropdown .form-control {
+  border: 1px solid #ddd;
+  font-size: 0.8rem;
+}
+
+.location-dropdown .btn-primary {
+  background: #3498db;
+  border-color: #3498db;
+}
+
+/* Temperature Display */
+.temperature-section {
+  padding: 0.5rem 0;
+}
+
+.weather-icon {
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+}
+
+.temperature-display .h4 {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  font-weight: 300;
+  letter-spacing: -0.5px;
+}
+
+.temperature-display .btn-link:hover {
+  color: white !important;
+  text-decoration: underline !important;
+}
+
+/* Additional Info */
+.additional-info .bg-white.bg-opacity-10 {
+  backdrop-filter: blur(5px);
+  transition: all 0.2s;
+}
+
+.additional-info .bg-white.bg-opacity-10:hover {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Buttons */
+.simple-temperature .btn-outline-light {
+  border-color: rgba(255, 255, 255, 0.4);
+  color: white;
+  transition: all 0.2s;
+}
+
+.simple-temperature .btn-outline-light:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: white;
+}
+
+/* Refresh button animation */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fa-spin {
+  animation: spin 1s linear infinite;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .simple-temperature {
+    margin-bottom: 1rem;
+  }
+  
+  .location-dropdown {
+    position: static;
+    width: 100%;
+  }
+}
+
+/* Mini Weather Widget */
+.mini-weather {
+  position: relative;
+  z-index: 100;
+}
+
+.mini-weather .bg-white.bg-opacity-10 {
+  background: rgba(255, 255, 255, 0.1) !important;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.mini-weather .bg-white.bg-opacity-10:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.location-badge .badge {
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.location-badge .badge:hover {
+  background: rgba(13, 110, 253, 0.4) !important;
+}
+
+.mini-dropdown {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.mini-dropdown .card {
+  border-radius: 10px;
+  overflow: hidden;
+  min-width: 150px;
+}
+
+.mini-dropdown .list-group-item {
+  border: none;
+  padding: 0.4rem 0.75rem;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.mini-dropdown .list-group-item:hover {
+  background-color: #f8f9fa;
+}
+
+.mini-dropdown .list-group-item.active {
+  background-color: #0d6efd;
+  color: white;
+}
+
+.mini-dropdown .input-group {
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.mini-dropdown .form-control-sm {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.mini-dropdown .btn-sm {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+/* Backdrop blur for header */
+.app-header {
+  backdrop-filter: blur(10px);
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+  .header-content {
+    flex-wrap: wrap;
+  }
+  
+  .mini-weather {
+    order: 3;
+    width: 100%;
+    margin-top: 1rem;
+    justify-content: center;
+  }
+  
+  .mini-weather > div {
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .mini-weather {
+    margin-top: 0.5rem;
+  }
+  
+  .mini-weather .temperature-display {
+    font-size: 0.8rem;
+  }
+  
+  .location-badge .badge {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.4rem;
+  }
+}
+
+/* Remove the old sidebar weather completely */
+.col-lg-3 .simple-temperature,
+.col-lg-3 .card.mt-2 {
+  display: none;
+}
+
+/* Update the main content to take full width */
+.col-lg-9 {
+  width: 100% !important;
+  max-width: 100% !important;
+  flex: 0 0 100% !important;
+}
+
+.col-lg-3 {
+  display: none;
+}
+
+/* Make PropertyComparison full width */
+.col-12 {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* Theme Variables */
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8f9fa;
+  --text-primary: #212529;
+  --text-secondary: #6c757d;
+  --border-color: #dee2e6;
+  --card-bg: #ffffff;
+  --header-bg: linear-gradient(135deg, #2c3e50 0%, #4a6fa5 100%);
+  --footer-bg: #2c3e50;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --text-primary: #f8f9fa;
+  --text-secondary: #adb5bd;
+  --border-color: #495057;
+  --card-bg: #1e1e1e;
+  --header-bg: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  --footer-bg: #0f172a;
+}
+
+/* Apply Theme Variables */
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Theme-specific styles */
+.dark-theme .app-main {
+  background-color: var(--bg-secondary);
+}
+
+.dark-theme .card {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme .form-control {
+  background-color: var(--bg-secondary);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme .form-control:focus {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.dark-theme .alert {
+  background-color: var(--card-bg);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.dark-theme .table {
+  color: var(--text-primary);
+}
+
+.dark-theme .table-hover tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dark-theme .text-muted {
+  color: var(--text-secondary) !important;
+}
+
+.dark-theme .bg-light {
+  background-color: var(--bg-secondary) !important;
+}
+
+.dark-theme .border {
+  border-color: var(--border-color) !important;
+}
+
+/* Header theme - stays consistent */
+.app-header {
+  background: var(--header-bg) !important;
+}
+
+.app-footer {
+  background: var(--footer-bg) !important;
+}
+
+/* Theme Toggle Button */
+.theme-toggle .btn-outline-light {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
+  transition: all 0.3s;
+}
+
+.theme-toggle .btn-outline-light:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-color: white;
+}
+
+/* Ensure white text in header stays white in dark mode */
+.app-header .text-light,
+.app-header .text-white,
+.app-header .user-email,
+.app-header .badge {
+  color: white !important;
+}
+
+/* Property Comparison specific dark theme adjustments */
+.dark-theme .enhanced-card {
+  background-color: var(--card-bg);
+}
+
+.dark-theme .timeline-section {
+  background-color: var(--card-bg);
+  border-left-color: #4a6fa5;
+}
+
+.dark-theme .calculation-total {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--border-color) 100%);
+  border-color: #4a6fa5;
+}
+
+/* Input forms in dark mode */
+.dark-theme .icon-input-group .input-icon {
+  color: #4a6fa5;
+}
+
+.dark-theme .btn-enhanced {
+  background: linear-gradient(135deg, #4a6fa5 0%, #2c3e50 100%);
+}
+
+/* Auth component in dark mode */
+.dark-theme .auth-container .card {
+  background-color: var(--card-bg);
+}
+
+.dark-theme .auth-container .form-control {
+  background-color: var(--bg-secondary);
+}
+
+/* Weather widget in dark mode */
+.dark-theme .mini-weather .bg-white.bg-opacity-10 {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
