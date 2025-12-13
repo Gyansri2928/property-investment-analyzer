@@ -15,6 +15,38 @@ function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false);
+  const [theme, setTheme] = useState('light'); // Add theme state
+
+  // Theme effect - apply theme to document
+  useEffect(() => {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    setTheme(savedTheme);
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    
+    // Also add class to body for backward compatibility
+    if (savedTheme === 'dark') {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+  }, []);
+
+  // Function to toggle theme
+  const toggleTheme = () => {
+    const newTheme = theme === 'light' ? 'dark' : 'light';
+    setTheme(newTheme);
+    document.documentElement.setAttribute('data-theme', newTheme);
+    
+    // Update body class
+    if (newTheme === 'dark') {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+    
+    // Save to localStorage
+    localStorage.setItem('theme', newTheme);
+  };
 
   // 🔍 TEMPORARY DEBUG LOGS
   useEffect(() => {
@@ -99,7 +131,8 @@ function App() {
           <p className="mt-3">Loading Property Investment Analyzer...</p>
           <small className="text-muted d-block mt-2">
             Environment: {process.env.NODE_ENV} | 
-            Firebase: {auth ? 'Initialized' : 'Loading...'}
+            Firebase: {auth ? 'Initialized' : 'Loading...'} |
+            Theme: {theme}
           </small>
         </div>
       </div>
@@ -118,12 +151,13 @@ function App() {
                 <i className="fas fa-bug me-1"></i>
                 DEBUG: {process.env.NODE_ENV} | 
                 Firebase: {auth?.app?.name || 'Not loaded'} | 
-                Env Vars: {process.env.REACT_APP_FIREBASE_API_KEY ? 'Loaded' : 'Missing'}
+                Env Vars: {process.env.REACT_APP_FIREBASE_API_KEY ? 'Loaded' : 'Missing'} |
+                Theme: {theme}
               </div>
               <button 
                 className="btn btn-sm btn-outline-light"
                 onClick={() => {
-                  console.log('📊 Current State:', { user, emailVerified, loading });
+                  console.log('📊 Current State:', { user, emailVerified, loading, theme });
                   console.log('🔧 Firebase Auth:', auth);
                 }}
               >
@@ -150,22 +184,20 @@ function App() {
                 <p className="app-subtitle">
                   Compare and analyze property investments with detailed financial breakdowns
                 </p>
-                <div className="environment-badge">
-                  <span className="badge bg-info">v{config.version}</span>
-                  {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
-                  {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
-                  <span className="badge bg-secondary ms-2">
-                    <i className={`fas ${process.env.REACT_APP_FIREBASE_API_KEY ? 'fa-check' : 'fa-times'} me-1`}></i>
-                    Firebase
-                  </span>
-                </div>
+               <div className="environment-badge">
+   {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
+  {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
+ 
+  
+</div>
+
               </div>
             </div>
             
             {/* RIGHT SIDE: Theme Toggle + Mini Weather + User Info */}
             <div className="d-flex align-items-center gap-3">
               {/* Theme Toggle */}
-              <ThemeToggle />
+              <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
               
               {/* Mini Weather Widget */}
               <MiniWeather />
@@ -275,7 +307,7 @@ function App() {
                       Sign In Required
                     </h3>
                     <small className="opacity-75">
-                      Firebase: {auth ? 'Ready' : 'Loading...'}
+                      Firebase: {auth ? 'Ready' : 'Loading...'} | Theme: {theme}
                     </small>
                   </div>
                   <div className="card-body p-4">
@@ -292,7 +324,7 @@ function App() {
                       {process.env.NODE_ENV === 'development' && (
                         <small className="text-info">
                           <i className="fas fa-info-circle me-1"></i>
-                          Dev Mode | Firebase Project: {process.env.REACT_APP_FIREBASE_PROJECT_ID || 'Not set'}
+                          Dev Mode | Firebase Project: {process.env.REACT_APP_FIREBASE_PROJECT_ID || 'Not set'} | Theme: {theme}
                         </small>
                       )}
                     </div>
@@ -304,18 +336,21 @@ function App() {
         </div>
       </main>
       
-      <footer className="app-footer">
-        <div className="container">
-          <p>© {new Date().getFullYear()} Property Investment Analyzer • v{config.version}</p>
-          <small className="text-muted">
-            {config.isProduction() ? 'Production Environment' : 'Development Environment'} • 
-            Currency: {config.currency}
-            {user && ` • Logged in as: ${user.email}`}
-            {user && ` • Email Status: ${emailVerified ? 'Verified' : 'Pending Verification'}`}
-            {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
-          </small>
-        </div>
-      </footer>
+    <footer className="app-footer" style={{ backgroundColor: '#50C878', color: '#FFFFFF' }}>
+  <div className="container">
+    <p style={{ margin: 0, fontWeight: 'bold' }}>
+      © {new Date().getFullYear()} Property Investment Analyzer • v{config.version}
+    </p>
+    <small style={{ opacity: 0.9, fontSize: '0.85rem' }}>
+      {config.isProduction() ? 'Production Environment' : 'Development Environment'} • 
+      Currency: {config.currency} • 
+      Theme: {theme} {/* This is dynamic now */}
+      {user && ` • Logged in as: ${user.email}`}
+      {user && ` • Email Status: ${emailVerified ? 'Verified' : 'Pending Verification'}`}
+      {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
+    </small>
+  </div>
+</footer>
     </div>
   );
 
