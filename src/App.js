@@ -343,8 +343,7 @@ function App() {
     </p>
     <small style={{ opacity: 0.9, fontSize: '0.85rem' }}>
       {config.isProduction() ? 'Production Environment' : 'Development Environment'} • 
-      Currency: {config.currency} • 
-      Theme: {theme} {/* This is dynamic now */}
+      Currency: {config.currency}
       {user && ` • Logged in as: ${user.email}`}
       {user && ` • Email Status: ${emailVerified ? 'Verified' : 'Pending Verification'}`}
       {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
