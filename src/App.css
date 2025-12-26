@@ -944,3 +944,113 @@ body {
 .dark-theme .mini-weather .bg-white.bg-opacity-10 {
   background: rgba(255, 255, 255, 0.1) !important;
 }
+
+/* =========================================
+   FIX FOR LOGIN INPUT VISIBILITY
+   Add this to the very bottom of App.css
+   ========================================= */
+
+/* 1. Standard Placeholder Color (Light Mode) */
+.auth-container input::placeholder {
+  color: #6c757d !important; /* Classic Gray */
+  opacity: 1;
+}
+
+/* 2. Dark Mode Input Fixes */
+/* This ensures the box is dark but text is white */
+.dark-theme .auth-container input {
+  background-color: #2b3035 !important;
+  color: #ffffff !important;
+  border-color: #495057;
+}
+
+/* 3. Dark Mode Placeholder Color */
+/* This ensures the hint is visible on the dark background */
+.dark-theme .auth-container input::placeholder {
+  color: #a0a0a0 !important; /* Light Gray */
+}
+/* Fix for the "Password must be at least 6 characters" text in Dark Mode */
+.dark-theme .form-text {
+  color: #ffffff !important;
+  opacity: 1; /* Makes it just slightly softer than the main text */
+}
+
+/* =========================================
+   PREMIUM LIGHT MODE STYLES
+   Add this to the bottom of App.css
+   ========================================= */
+
+/* 1. Add a professional gradient background behind the login box */
+/* This replaces the boring plain white background */
+body:not(.dark-theme) .app-main {
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%) !important;
+  min-height: 85vh; /* Ensures the gradient covers the screen */
+}
+
+/* 2. Make the Login Card "Float" with a Soft Shadow */
+body:not(.dark-theme) .auth-container .card {
+  border: none; /* Remove the ugly gray border */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15) !important; /* Premium "Apple-style" shadow */
+  border-radius: 20px; /* Softer, rounder corners */
+}
+
+/* 3. Modernize the Input Fields */
+body:not(.dark-theme) .auth-container .form-control {
+  background-color: #f8f9fa;
+  border: 1px solid #e2e8f0;
+  padding: 15px; /* Taller, more comfortable inputs */
+  border-radius: 10px;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+/* 4. cool "Glow" effect when you click an input */
+body:not(.dark-theme) .auth-container .form-control:focus {
+  background-color: #ffffff;
+  border-color: #4a6fa5;
+  box-shadow: 0 0 0 4px rgba(74, 111, 165, 0.1);
+  transform: translateY(-2px); /* Subtle lift effect */
+}
+
+/* 5. Make the "Sign In" button pop */
+body:not(.dark-theme) .auth-container .btn-primary {
+  background: linear-gradient(45deg, #2c3e50, #4a6fa5);
+  border: none;
+  padding: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 15px rgba(74, 111, 165, 0.3);
+}
+/* =========================================
+   FIX FOR ALERT CLOSE BUTTONS IN DARK MODE
+   Add this to the bottom of App.css
+   ========================================= */
+.dark-theme .alert .btn-close {
+    /* This CSS filter inverts the black icon color to white */
+    filter: invert(1) grayscale(100%) brightness(200%);
+}
+/* =========================================
+   TABLET RESPONSIVENESS (iPad, Galaxy Tab)
+   Range: 768px to 1024px
+   ========================================= */
+@media (min-width: 768px) and (max-width: 1024px) {
+  
+  /* Center the card vertically a bit more on tablets */
+  .auth-container {
+    margin-top: 2rem; 
+    margin-bottom: 2rem;
+  }
+
+  /* Ensure the text inside isn't too small on high-res tablets */
+  .auth-container p, 
+  .auth-container input {
+    font-size: 1.05rem; 
+  }
+
+  /* Make the icon slightly larger than mobile but smaller than desktop */
+  .auth-container .rounded-circle {
+    width: 70px !important;
+    height: 70px !important;
+    padding: 1.2rem !important;
+  }
+}

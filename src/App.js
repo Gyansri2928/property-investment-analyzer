@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { PropertyComparison } from './components';
 import Auth from './components/Auth';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import 'bootstrap-icons/font/bootstrap-icons.css';
 import './App.css';
 import config from './config';
 import { auth } from './firebase';
@@ -298,37 +299,21 @@ function App() {
               )}
             </>
           ) : (
-            <div className="row justify-content-center">
-              <div className="col-md-6 col-lg-5">
-                <div className="card shadow-lg border-0">
-                  <div className="card-header bg-primary text-white">
-                    <h3 className="card-title mb-0">
-                      <i className="fas fa-lock me-2"></i>
-                      Sign In Required
-                    </h3>
-                    <small className="opacity-75">
-                      Firebase: {auth ? 'Ready' : 'Loading...'} | Theme: {theme}
+            <div className="row justify-content-center mt-3 mt-md-5">
+              <div className="col-12 col-md-8 col-lg-5 col-xl-4">
+                {/* REMOVED: The outer "Sign In Required" card wrapper.
+                   KEPT: The centered layout and the Auth component itself.
+                */}
+                <Auth />
+                
+                {/* Optional footer text kept clean below the form */}
+                <div className="text-center mt-3 text-muted small">
+                  <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
+                  {process.env.NODE_ENV === 'development' && (
+                    <small className="opacity-50">
+                      Dev Mode | Theme: {theme}
                     </small>
-                  </div>
-                  <div className="card-body p-4">
-                    <div className="text-center mb-4">
-                      <i className="fas fa-chart-line fa-3x text-primary mb-3"></i>
-                      <h4>Access Property Investment Tools</h4>
-                      <p className="text-muted">
-                        Please sign in or create an account to use the Property Investment Analyzer
-                      </p>
-                    </div>
-                    <Auth />
-                    <div className="mt-4 text-center text-muted small">
-                      <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
-                      {process.env.NODE_ENV === 'development' && (
-                        <small className="text-info">
-                          <i className="fas fa-info-circle me-1"></i>
-                          Dev Mode | Firebase Project: {process.env.REACT_APP_FIREBASE_PROJECT_ID || 'Not set'} | Theme: {theme}
-                        </small>
-                      )}
-                    </div>
-                  </div>
+                  )}
                 </div>
               </div>
             </div>

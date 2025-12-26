@@ -2,19 +2,22 @@ import React, { useState } from 'react';
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword,
-  sendEmailVerification,  // ADDED
-  sendPasswordResetEmail  // ADDED (optional)
+  sendEmailVerification,  
+  sendPasswordResetEmail  
 } from 'firebase/auth';
 import { auth } from '../firebase';
 
 function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  // 1. NEW STATE: Tracks if password is visible
+  const [showPassword, setShowPassword] = useState(false); 
+  
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false); // ADDED for success messages
-  const [successMessage, setSuccessMessage] = useState(''); // ADDED
+  const [showSuccess, setShowSuccess] = useState(false); 
+  const [successMessage, setSuccessMessage] = useState(''); 
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,43 +28,58 @@ function Auth() {
 
     try {
       if (isLogin) {
-        // Sign in existing user
+        // Sign in
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         
-        // Check if email is verified
         if (!user.emailVerified) {
           setError('Please verify your email before signing in. Check your inbox for the verification link.');
-          // Optional: Add button to resend verification email
         } else {
           console.log('User signed in successfully');
           setSuccessMessage('Successfully signed in!');
           setShowSuccess(true);
         }
       } else {
-        // Create new user
+        // Sign up
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        
-        // Send verification email
         await sendEmailVerification(user);
         
         console.log('User created successfully');
         setSuccessMessage('Account created! Please check your email to verify your account.');
         setShowSuccess(true);
-        
-        // Optional: Auto-switch to login mode after successful signup
-        // setIsLogin(true);
       }
     } catch (error) {
       console.error('Authentication error:', error);
-      setError(error.message);
+      
+      let customMessage = "An error occurred. Please try again.";
+      switch (error.code) {
+        case 'auth/invalid-credential':
+        case 'auth/wrong-password':
+        case 'auth/user-not-found':
+          customMessage = "Incorrect email or password. Please try again.";
+          break;
+        case 'auth/email-already-in-use':
+          customMessage = "This email is already registered. Try logging in instead.";
+          break;
+        case 'auth/weak-password':
+          customMessage = "Password is too weak. Please use at least 6 characters.";
+          break;
+        case 'auth/invalid-email':
+          customMessage = "Please enter a valid email address.";
+          break;
+        case 'auth/too-many-requests':
+          customMessage = "Too many failed attempts. Please try again later or reset your password.";
+          break;
+        default:
+          customMessage = error.message; 
+      }
+      setError(customMessage);
     } finally {
       setLoading(false);
     }
   };
 
-  // ADDED: Forgot password function
   const handleForgotPassword = async () => {
     if (!email) {
       setError('Please enter your email address first');
@@ -82,7 +100,6 @@ function Auth() {
     }
   };
 
-  // ADDED: Resend verification email
   const handleResendVerification = async () => {
     const user = auth.currentUser;
     if (user) {
@@ -102,15 +119,24 @@ function Auth() {
   return (
     <div className="auth-container">
       <div className="card shadow">
-        <div className="card-header bg-primary text-white">
-          <h4 className="mb-0">
-            <i className={`fas ${isLogin ? 'fa-sign-in-alt' : 'fa-user-plus'} me-2`}></i>
+        <div className="card-body p-4">
+          <div className="text-center mb-4">
+            <div className="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 rounded-circle p-3 mb-3" style={{ width: '70px', height: '70px' }}>
+              <i className="fas fa-chart-line fa-2x text-primary"></i>
+            </div>
+            <h4 className="fw-bold">Access Property Tools</h4>
+            <p className="text-muted small">
+              {isLogin 
+                ? "Welcome back! Please sign in to continue." 
+                : "Create an account to save your investment scenarios."}
+            </p>
+          </div>
+          
+          <h4 className="text-center mb-4 fw-bold">
+            <i className={`fas ${isLogin ? 'fa-sign-in-alt' : 'fa-user-plus'} me-2 text-primary`}></i>
             {isLogin ? 'Sign In to Your Account' : 'Create New Account'}
           </h4>
-        </div>
-        
-        <div className="card-body p-4">
-          {/* SUCCESS MESSAGE - ADDED */}
+
           {showSuccess && (
             <div className="alert alert-success alert-dismissible fade show" role="alert">
               {successMessage}
@@ -118,13 +144,11 @@ function Auth() {
             </div>
           )}
 
-          {/* ERROR MESSAGE */}
           {error && (
             <div className="alert alert-danger alert-dismissible fade show" role="alert">
               {error}
               <button type="button" className="btn-close" onClick={() => setError('')}></button>
               
-              {/* ADDED: Show resend verification button if error is about unverified email */}
               {error.includes('verify your email') && auth.currentUser && (
                 <div className="mt-2">
                   <button 
@@ -160,22 +184,35 @@ function Auth() {
               <label htmlFor="password" className="form-label">
                 <i className="fas fa-lock me-2"></i>Password
               </label>
-              <input
-                type="password"
-                id="password"
-                className="form-control"
-                placeholder="Enter your password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                disabled={loading}
-                minLength="6"
-              />
+              
+              {/* 2. UPDATED PASSWORD INPUT BLOCK */}
+              <div className="position-relative">
+                <input
+                  type={showPassword ? "text" : "password"} // Dynamic Type
+                  id="password"
+                  className="form-control pe-5" // Added pe-5 for padding so text doesn't hit icon
+                  placeholder="Enter your password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  disabled={loading}
+                  minLength="6"
+                />
+                <button
+                  type="button"
+                  className="btn btn-link position-absolute top-50 end-0 translate-middle-y text-decoration-none text-muted"
+                  style={{ zIndex: 10, marginRight: '5px' }}
+                  onClick={() => setShowPassword(!showPassword)}
+                >
+                  <i className={`fas ${showPassword ? 'fa-eye-slash' : 'fa-eye'}`}></i>
+                </button>
+              </div>
+              {/* END UPDATED BLOCK */}
+
               <div className="form-text">
                 Password must be at least 6 characters long
               </div>
               
-              {/* ADDED: Forgot password link */}
               {isLogin && (
                 <div className="mt-2 text-end">
                   <button 
@@ -209,7 +246,6 @@ function Auth() {
             </button>
           </form>
 
-          {/* ADDED: Email verification info for sign-up */}
           {!isLogin && (
             <div className="mt-3 alert alert-info">
               <i className="fas fa-info-circle me-2"></i>
@@ -250,7 +286,6 @@ function Auth() {
                   {isLogin ? 'Need help signing in?' : 'Use a strong password for security'}
                 </small>
               </div>
-              {/* ADDED: Email note */}
               <div className="col-12">
                 <small className="text-muted">
                   <i className="fas fa-envelope me-1"></i>

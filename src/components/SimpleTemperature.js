@@ -77,7 +77,7 @@ const SimpleTemperature = () => {
   };
 
   return (
-    <div className="simple-temperature card border-0 shadow-sm">
+    <div className="simple-temperature glass-card text-white">
       <div className="card-body p-2">
         {/* Location Selector */}
         <div className="location-selector mb-2">
