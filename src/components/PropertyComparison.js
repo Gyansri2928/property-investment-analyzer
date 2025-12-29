@@ -159,7 +159,7 @@ const renderKeyInsights = (breakdown) => {
 
   return (
     <div className="glass-card mb-5 p-3">
-      <div className="card-header  text-white">
+      <div className="card-header">
         <h5 className="mb-2">
           <i className="bi bi-lightbulb-fill me-2"></i>
           Key Financial Insights
