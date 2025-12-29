@@ -220,8 +220,13 @@ const renderKeyInsights = (breakdown) => {
 
 const PropertyComparison = () => {
   // --- STATE ---
-  
-  const [isDarkTheme] = useState(false);
+
+  const [isDarkTheme, setisDarkTheme] = useState(() => {
+    // Check if the user previously selected a theme
+    const savedTheme = localStorage.getItem('theme');
+    // If they saved 'dark', start as true. Otherwise default to false.
+    return savedTheme === 'dark';
+  });
   const [activeTab, setActiveTab] = useState('inputs');
   const [showDataEnteredAlert, setShowDataEnteredAlert] = useState(false);
 
@@ -246,14 +251,18 @@ const PropertyComparison = () => {
     selectedPropertySize: 1428, scenarioSize: 1428, scenarioExitPrice: 6000, scenarioExitPrices: [6000, 7000, 8000]
   });
 
-  // --- THEME EFFECT (FIXED) ---
+
+  // 2. Update Body Class & Save to Memory
   useEffect(() => {
-    // Forcefully apply the correct class for BOTH states
+    // Save to LocalStorage so other pages know
+    localStorage.setItem('appTheme', isDarkTheme ? 'dark' : 'light');
+
+    // Apply the classes (The robust logic we added earlier)
     if (isDarkTheme) {
       document.body.classList.add('dark-theme');
       document.body.classList.remove('light-theme');
     } else {
-      document.body.classList.add('light-theme'); // <--- This fixes the "invisible text"
+      document.body.classList.add('light-theme');
       document.body.classList.remove('dark-theme');
     }
   }, [isDarkTheme]);
@@ -517,10 +526,10 @@ const PropertyComparison = () => {
   // 1. Generic Handler: Updates any field for a specific property
   const updatePropertyField = (index, field, value) => {
     const newProperties = [...propertyData.properties];
-    
+
     // Parse the value correctly
     const newValue = field === 'name' || field === 'location' ? value : parseFloat(value) || 0;
-    
+
     // Update the list
     newProperties[index][field] = newValue;
     setPropertyData(prev => ({ ...prev, properties: newProperties }));
@@ -528,11 +537,21 @@ const PropertyComparison = () => {
     // <<< THE FIX: Sync "Size" with the Calculation Engine immediately >>>
     // If the user is editing the currently selected property's size, update the selection state too.
     if (newProperties[index].id === userSelections.selectedPropertyId && field === 'size') {
-        setUserSelections(prev => ({ ...prev, selectedPropertySize: newValue }));
+      setUserSelections(prev => ({ ...prev, selectedPropertySize: newValue }));
     }
   };
 
-  // 2. UI Builder: Generates the input HTML automatically
+  // 💡 Hint Text Dictionary (Add this right before renderPropertyInput)
+  const placeholders = {
+    name: "e.g. Supernova Tower A",
+    location: "e.g. Sector 94, Noida",
+    size: "e.g. 1250",
+    possessionMonths: "e.g. 24",
+    purchasePrice: "e.g. 6500",
+    investmentPeriod: "e.g. 3"
+  };
+
+  // 2. UI Builder: Generates the input HTML automatically (UPDATED)
   const renderPropertyInput = (index, property, label, field, type = "text", helpText = "") => (
     <div className="mb-3">
       <label className="form-label small">{label}</label>
@@ -540,11 +559,14 @@ const PropertyComparison = () => {
         type={type}
         className="form-control form-control-sm"
         value={property[field]}
+        // ⬇️ ADDED PLACEHOLDER LOGIC HERE
+        placeholder={placeholders[field] || `Enter ${label}`}
         onChange={(e) => updatePropertyField(index, field, e.target.value)}
       />
       {helpText && <small className="text-muted">{helpText}</small>}
     </div>
   );
+
   const handleAnalyzeClick = () => {
     setActiveTab('overview');
     setShowDataEnteredAlert(true);
@@ -677,6 +699,7 @@ const PropertyComparison = () => {
                     type="number"
                     className="form-control"
                     value={propertyData.purchasePrice}
+                    placeholder="e.g. 5000"  // <--- Added Hint
                     onChange={(e) => handleInputChange('purchasePrice', parseFloat(e.target.value))}
                   />
                 </div>

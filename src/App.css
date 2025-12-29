@@ -1,12 +1,4 @@
 /* App.css */
-:root {
-  /* Default to Light Mode colors immediately */
-  --bg-color: #f8f9fa;
-  --text-primary: #212529;
-  --text-secondary: #6c757d;
-  --card-bg: #ffffff;
-}
-
 .App {
   min-height: 100vh;
   display: flex;
