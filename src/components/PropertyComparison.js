@@ -246,9 +246,16 @@ const PropertyComparison = () => {
     selectedPropertySize: 1428, scenarioSize: 1428, scenarioExitPrice: 6000, scenarioExitPrices: [6000, 7000, 8000]
   });
 
-  // --- THEME EFFECT ---
+  // --- THEME EFFECT (FIXED) ---
   useEffect(() => {
-    isDarkTheme ? document.body.classList.add('dark-theme') : document.body.classList.remove('dark-theme');
+    // Forcefully apply the correct class for BOTH states
+    if (isDarkTheme) {
+      document.body.classList.add('dark-theme');
+      document.body.classList.remove('light-theme');
+    } else {
+      document.body.classList.add('light-theme'); // <--- This fixes the "invisible text"
+      document.body.classList.remove('dark-theme');
+    }
   }, [isDarkTheme]);
 
 
