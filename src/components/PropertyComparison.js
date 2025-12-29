@@ -507,11 +507,22 @@ const PropertyComparison = () => {
     }));
   };
   // 1. Generic Handler: Updates any field for a specific property
+  // 1. Generic Handler: Updates any field for a specific property
   const updatePropertyField = (index, field, value) => {
     const newProperties = [...propertyData.properties];
-    // If it's a number field, convert string to float, otherwise keep as string
-    newProperties[index][field] = field === 'name' || field === 'location' ? value : parseFloat(value) || 0;
+    
+    // Parse the value correctly
+    const newValue = field === 'name' || field === 'location' ? value : parseFloat(value) || 0;
+    
+    // Update the list
+    newProperties[index][field] = newValue;
     setPropertyData(prev => ({ ...prev, properties: newProperties }));
+
+    // <<< THE FIX: Sync "Size" with the Calculation Engine immediately >>>
+    // If the user is editing the currently selected property's size, update the selection state too.
+    if (newProperties[index].id === userSelections.selectedPropertyId && field === 'size') {
+        setUserSelections(prev => ({ ...prev, selectedPropertySize: newValue }));
+    }
   };
 
   // 2. UI Builder: Generates the input HTML automatically
