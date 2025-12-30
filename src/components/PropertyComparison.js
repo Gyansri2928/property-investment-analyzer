@@ -2040,33 +2040,28 @@ const PropertyComparison = () => {
               <p className="lead text-light opacity-90 mb-4">
                 Comprehensive tool for real estate investment analysis
               </p>
-
-              {/* Navigation Tabs */}
-              <div className="glass-card mb-4">
-                <div className="card-body p-2">
-                  <div className="d-flex flex-wrap gap-2 justify-content-center">
+              
+              {/* Navigation Tabs - Modern Segmented Style */}
+              <div className="d-flex justify-content-center mb-2">
+                <div className="glass-card p-1 rounded-pill d-inline-flex border border-secondary border-opacity-25">
+                  {[
+                    { id: 'inputs', icon: 'bi-input-cursor', label: 'Input Parameters' },
+                    { id: 'overview', icon: 'bi-speedometer2', label: 'Analysis Overview' },
+                    { id: 'breakdown', icon: 'bi-calculator', label: 'Detailed Breakdown' }
+                  ].map((tab) => (
                     <button
-                      className={`btn ${activeTab === 'inputs' ? 'btn-primary' : 'btn-outline-primary'} rounded-pill px-4`}
-                      onClick={() => setActiveTab('inputs')}
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`btn rounded-pill px-4 py-2 d-flex align-items-center border-0 ${activeTab === tab.id
+                          ? 'btn-primary shadow-sm fw-bold' // Active Style
+                          : 'text-white text-opacity-75 hover-opacity-100' // Inactive Style (Clean text)
+                        }`}
+                      style={{ transition: 'all 0.3s ease' }}
                     >
-                      <i className="bi bi-input-cursor me-2"></i>
-                      Input Parameters
+                      <i className={`bi ${tab.icon} me-2`}></i>
+                      {tab.label}
                     </button>
-                    <button
-                      className={`btn ${activeTab === 'overview' ? 'btn-primary' : 'btn-outline-primary'} rounded-pill px-4`}
-                      onClick={() => setActiveTab('overview')}
-                    >
-                      <i className="bi bi-speedometer2 me-2"></i>
-                      Analysis Overview
-                    </button>
-                    <button
-                      className={`btn ${activeTab === 'breakdown' ? 'btn-primary' : 'btn-outline-primary'} rounded-pill px-4`}
-                      onClick={() => setActiveTab('breakdown')}
-                    >
-                      <i className="bi bi-calculator me-2"></i>
-                      Detailed Breakdown
-                    </button>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
