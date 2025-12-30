@@ -232,6 +232,7 @@ const PropertyComparison = () => {
   const [propertyData, setPropertyData] = useState({
     purchasePrice: '',
     otherCharges: '',
+    stampDuty: '',
     exitPrices: [6000, 7000, 8000],
     properties: [{ id: 1, size: '', name: '', location: '', rating: 0, isHighlighted: true, possessionMonths: '' }],
     paymentPlan: 'clp',
@@ -259,13 +260,16 @@ const PropertyComparison = () => {
 
     // 1. Internal Helper: Performs the core financial math
     const calculateFinancials = (propertySize, exitPrice, years) => {
-      // 1. Get otherCharges from state
-      const { purchasePrice, otherCharges, assumptions, paymentPlan } = propertyData;
+      // 1. Get inputs including the new stampDuty
+      const { purchasePrice, otherCharges, stampDuty, assumptions, paymentPlan } = propertyData;
 
-      // 2. Calculate Total Cost = (Size * Price) + Other Charges
+      // 2. Calculate Costs
       const baseCost = propertySize * getSafeValue(purchasePrice);
-      const extraCharges = getSafeValue(otherCharges);
-      const totalCost = baseCost + extraCharges;
+      const extraCharges = getSafeValue(otherCharges); // Lumpsum
+      const stampDutyCost = baseCost * (getSafeValue(stampDuty) / 100); // Percentage Calculation
+
+      // 3. Sum it up
+      const totalCost = baseCost + extraCharges + stampDutyCost;
 
       // ... inside calculateFinancials ...
 
@@ -738,6 +742,25 @@ const PropertyComparison = () => {
                   />
                   <small className="text-muted" style={{ fontSize: '0.75rem' }}>
                     GST, Parking, Club Membership, etc.
+                  </small>
+                </div>
+                {/* 3. NEW FIELD: Stamp Duty (%) */}
+                <div className="col-md-6">
+                  <label className="form-label">Stamp Duty (%)</label>
+                  <div className="input-group">
+                    <input
+                      type="number"
+                      className="form-control"
+                      value={propertyData.stampDuty}
+                      placeholder="e.g. 5"
+                      min="0"
+                      max="100"
+                      onChange={(e) => handleInputChange('stampDuty', parseFloat(e.target.value))}
+                    />
+                    <span className="input-group-text">%</span>
+                  </div>
+                  <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                    Govt. registration charges (usually 5-8%)
                   </small>
                 </div>
                 <div className="col-md-6">
@@ -2037,10 +2060,10 @@ const PropertyComparison = () => {
             {/* Main Header */}
             <div className="text-center mb-4 pt-3">
 
-              <p className="lead text-light opacity-90 mb-4">
-                Comprehensive tool for real estate investment analysis
+              <p className="lead text-light opacity-90 mb-4" style={{ letterSpacing: '0.5px' }}>
+                Model your payment plan, optimize loans, and forecast returns.
               </p>
-              
+
               {/* Navigation Tabs - Modern Segmented Style */}
               <div className="d-flex justify-content-center mb-2">
                 <div className="glass-card p-1 rounded-pill d-inline-flex border border-secondary border-opacity-25">
@@ -2053,8 +2076,8 @@ const PropertyComparison = () => {
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
                       className={`btn rounded-pill px-4 py-2 d-flex align-items-center border-0 ${activeTab === tab.id
-                          ? 'btn-primary shadow-sm fw-bold' // Active Style
-                          : 'text-white text-opacity-75 hover-opacity-100' // Inactive Style (Clean text)
+                        ? 'btn-primary shadow-sm fw-bold' // Active Style
+                        : 'text-secondary hover-text-primary' // Inactive Style (Clean text)
                         }`}
                       style={{ transition: 'all 0.3s ease' }}
                     >
