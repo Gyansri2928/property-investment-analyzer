@@ -231,6 +231,7 @@ const PropertyComparison = () => {
   // Input Data States
   const [propertyData, setPropertyData] = useState({
     purchasePrice: '',
+    otherCharges: '',
     exitPrices: [6000, 7000, 8000],
     properties: [{ id: 1, size: '', name: '', location: '', rating: 0, isHighlighted: true, possessionMonths: '' }],
     paymentPlan: 'clp',
@@ -258,8 +259,13 @@ const PropertyComparison = () => {
 
     // 1. Internal Helper: Performs the core financial math
     const calculateFinancials = (propertySize, exitPrice, years) => {
-      const { purchasePrice, assumptions, paymentPlan } = propertyData;
-      const totalCost = propertySize * purchasePrice;
+      // 1. Get otherCharges from state
+      const { purchasePrice, otherCharges, assumptions, paymentPlan } = propertyData;
+
+      // 2. Calculate Total Cost = (Size * Price) + Other Charges
+      const baseCost = propertySize * getSafeValue(purchasePrice);
+      const extraCharges = getSafeValue(otherCharges);
+      const totalCost = baseCost + extraCharges;
 
       // ... inside calculateFinancials ...
 
@@ -569,18 +575,37 @@ const PropertyComparison = () => {
       let newAssumptions = { ...prev.assumptions };
 
       if (plan === 'clp') {
+        // Standard CLP: 80% HL, 10% Booking (PL1), 10% Possession (PL2)
         newAssumptions.personalLoan1Share = 10;
         newAssumptions.personalLoan2Share = 10;
         newAssumptions.downPaymentShare = 0;
-      } else if (plan === '20-80') {
+        newAssumptions.homeLoanShare = 80;
+      }
+      else if (plan === '80-20') {
+        // 80% Home Loan, 20% Self Funding (PL1)
         newAssumptions.personalLoan1Share = 20;
         newAssumptions.personalLoan2Share = 0;
         newAssumptions.downPaymentShare = 0;
-      } else if (plan === '40-60') {
-        newAssumptions.personalLoan1Share = 40;
+        newAssumptions.homeLoanShare = 80;
+      }
+      else if (plan === '25-75') {
+        // 75% Home Loan, 25% Self Funding (PL1)
+        newAssumptions.personalLoan1Share = 25;
         newAssumptions.personalLoan2Share = 0;
         newAssumptions.downPaymentShare = 0;
-      } else if (plan === 'custom') {
+        newAssumptions.homeLoanShare = 75;
+      }
+      else if (plan === 'rtm') {
+        // Ready to Move: Immediate Possession, Standard 80-20 Split
+        newAssumptions.personalLoan1Share = 20;
+        newAssumptions.personalLoan2Share = 0;
+        newAssumptions.downPaymentShare = 0;
+        newAssumptions.homeLoanShare = 80;
+        // Crucial: RTM means possession is NOW
+        newAssumptions.possessionMonths = 0;
+        newAssumptions.homeLoanStartMonth = 0;
+      }
+      else if (plan === 'custom') {
         if (!newAssumptions.downPaymentShare) newAssumptions.downPaymentShare = 0;
       }
 
@@ -701,6 +726,20 @@ const PropertyComparison = () => {
                     onChange={(e) => handleInputChange('purchasePrice', parseFloat(e.target.value))}
                   />
                 </div>
+                {/* 2. NEW FIELD: Other Charges */}
+                <div className="col-md-6">
+                  <label className="form-label">Other Charges (Lumpsum)</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={propertyData.otherCharges}
+                    placeholder="e.g. 500000"
+                    onChange={(e) => handleInputChange('otherCharges', parseFloat(e.target.value))}
+                  />
+                  <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                    GST, Parking, Club Membership, etc.
+                  </small>
+                </div>
                 <div className="col-md-6">
                   <label className="form-label">Select Property for Analysis</label>
                   <select
@@ -734,16 +773,23 @@ const PropertyComparison = () => {
               <div className="row g-3">
                 <div className="col-md-6">
                   <label className="form-label">Payment Plan Type</label>
-                  <select
-                    className="form-select"
-                    value={propertyData.paymentPlan}
-                    onChange={(e) => handlePaymentPlanChange(e.target.value)}
-                  >
-                    <option value="clp">CLP (80% HL, 10% PL1, 10% PL2)</option>
-                    <option value="20-80">20% Down, 80% Loan (20% PL1, 80% HL)</option>
-                    <option value="40-60">40% Down, 60% Loan (40% PL1, 60% HL)</option>
-                    <option value="custom">Custom (User Defined)</option>
-                  </select>
+                  <div className="input-group">
+                    <select
+                      className="form-select"
+                      style={{ backgroundImage: 'none' }}
+                      value={propertyData.paymentPlan}
+                      onChange={(e) => handlePaymentPlanChange(e.target.value)}
+                    >
+                      <option value="clp">CLP (Construction Linked Plan)</option>
+                      <option value="80-20">80%-20% (80% HL, 20% Self)</option>
+                      <option value="25-75">25%-75% (75% HL, 25% Self)</option>
+                      <option value="rtm">Ready to move</option>
+                      <option value="custom">Custom (User Defined)</option>
+                    </select>
+                    <span className="input-group-text bg-white text-secondary border-start-0">
+                      <i className="bi bi-chevron-down"></i>
+                    </span>
+                  </div>
                 </div>
                 <div className="col-md-6">
                   <label className="form-label">Holding Period (Years)</label>
