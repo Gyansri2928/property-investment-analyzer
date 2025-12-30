@@ -425,3 +425,31 @@
 .dark-theme .badge {
     color: #fff !important;
 }
+/* --- FORM INPUT THEMING --- */
+/* Force Bootstrap inputs to use our theme variables */
+.form-control, .form-select {
+  background-color: var(--input-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--border-color) !important;
+  transition: background-color 0.3s, color 0.3s, border-color 0.3s;
+}
+
+/* Fix the text color when you click inside the input (Focus State) */
+.form-control:focus, .form-select:focus {
+  background-color: var(--input-bg) !important;
+  color: var(--text-primary) !important;
+  border-color: var(--highlight-blue) !important; 
+  box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25); /* Optional: Blue glow */
+}
+
+/* Ensure Placeholder text is readable in both modes */
+.form-control::placeholder {
+  color: var(--text-secondary) !important;
+  opacity: 0.7;
+}
+
+/* Disabled inputs should look different */
+.form-control:disabled, .form-select:disabled {
+  background-color: rgba(255, 255, 255, 0.1) !important; /* Slight transparency */
+  opacity: 0.6;
+}

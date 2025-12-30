@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import './PropertyComparison.css';
 
 // ===================== 1. PURE UTILITIES (Moved Outside for Speed) =====================
@@ -72,7 +72,11 @@ const renderStatCard = (label, value, subtext, color, colSize = 4) => (
     </div>
   </div>
 );
-
+// Helper: Converts empty strings or invalid numbers to 0 for calculations
+const getSafeValue = (value) => {
+  if (value === '' || value === null || isNaN(value)) return 0;
+  return parseFloat(value);
+};
 const renderTimelineCard = (title, icon, color, mainEMI, period, duration, componentsJSX, totalAmount, calcText, extraHeader = null, extraFooter = null) => (
   <div className="col-md-6">
     <div className={`card h-100 border-${color}`}>
@@ -221,23 +225,17 @@ const renderKeyInsights = (breakdown) => {
 const PropertyComparison = () => {
   // --- STATE ---
 
-  const [isDarkTheme, setisDarkTheme] = useState(() => {
-    // Check if the user previously selected a theme
-    const savedTheme = localStorage.getItem('theme');
-    // If they saved 'dark', start as true. Otherwise default to false.
-    return savedTheme === 'dark';
-  });
   const [activeTab, setActiveTab] = useState('inputs');
   const [showDataEnteredAlert, setShowDataEnteredAlert] = useState(false);
 
   // Input Data States
   const [propertyData, setPropertyData] = useState({
-    purchasePrice: 4400,
+    purchasePrice: '',
     exitPrices: [6000, 7000, 8000],
-    properties: [{ id: 1, size: 1428, name: 'Premium Penthouse', location: 'Waterfront', rating: 4.8, isHighlighted: true, possessionMonths: 24 }],
+    properties: [{ id: 1, size: '', name: '', location: '', rating: 0, isHighlighted: true, possessionMonths: '' }],
     paymentPlan: 'clp',
     assumptions: {
-      homeLoanRate: 8, homeLoanTerm: 20, homeLoanStartMonth: 25,
+      homeLoanRate: 8, homeLoanTerm: 20, homeLoanStartMonth: 25, homeLoanShare: '',
       personalLoan1Rate: 11, personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
       personalLoan2Rate: 11, personalLoan2Term: 7, personalLoan2StartMonth: 30, personalLoan2Share: 10,
       downPaymentShare: 0,
@@ -252,22 +250,6 @@ const PropertyComparison = () => {
   });
 
 
-  // 2. Update Body Class & Save to Memory
-  useEffect(() => {
-    // Save to LocalStorage so other pages know
-    localStorage.setItem('appTheme', isDarkTheme ? 'dark' : 'light');
-
-    // Apply the classes (The robust logic we added earlier)
-    if (isDarkTheme) {
-      document.body.classList.add('dark-theme');
-      document.body.classList.remove('light-theme');
-    } else {
-      document.body.classList.add('light-theme');
-      document.body.classList.remove('dark-theme');
-    }
-  }, [isDarkTheme]);
-
-
   // ===================== LOGIC ENGINE (useMemo) =====================
   // This replaces all your useCallback and useEffect logic for calculations.
   // It automatically recalculates ONLY when propertyData or userSelections change.
@@ -279,19 +261,26 @@ const PropertyComparison = () => {
       const { purchasePrice, assumptions, paymentPlan } = propertyData;
       const totalCost = propertySize * purchasePrice;
 
+      // ... inside calculateFinancials ...
+
       // Plan Logic
       let homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare;
+
       if (paymentPlan === 'clp') {
-        homeLoanShare = 80; personalLoan1Share = Math.max(0, Math.min(assumptions.personalLoan1Share || 10, 100)); personalLoan2Share = Math.max(0, Math.min(assumptions.personalLoan2Share || 10, 100)); downPaymentShare = 0;
+        homeLoanShare = 80; personalLoan1Share = 10; personalLoan2Share = 10; downPaymentShare = 0;
       } else if (paymentPlan === '20-80') {
         homeLoanShare = 80; personalLoan1Share = 20; personalLoan2Share = 0; downPaymentShare = 0;
       } else if (paymentPlan === '40-60') {
         homeLoanShare = 60; personalLoan1Share = 40; personalLoan2Share = 0; downPaymentShare = 0;
       } else {
-        personalLoan1Share = Math.max(0, Math.min(assumptions.personalLoan1Share || 0, 100));
-        personalLoan2Share = Math.max(0, Math.min(assumptions.personalLoan2Share || 0, 100));
-        downPaymentShare = Math.max(0, Math.min(assumptions.downPaymentShare || 0, 100));
-        homeLoanShare = Math.max(0, Math.min(100 - personalLoan1Share - personalLoan2Share - downPaymentShare, 100));
+        // --- CUSTOM PLAN (UPDATED) ---
+        // Now we read Home Loan directly from state instead of calculating it
+        personalLoan1Share = getSafeValue(assumptions.personalLoan1Share);
+        personalLoan2Share = getSafeValue(assumptions.personalLoan2Share);
+        downPaymentShare = getSafeValue(assumptions.downPaymentShare);
+
+        // UNFREEZING HOME LOAN: Read it from user input, default to 0 if empty
+        homeLoanShare = getSafeValue(assumptions.homeLoanShare);
       }
 
       const homeLoanAmount = totalCost * (homeLoanShare / 100);
@@ -606,6 +595,15 @@ const PropertyComparison = () => {
   // ===================== RENDER FUNCTIONS =====================
 
   const renderInputsTab = () => {
+    // 1. USE getSafeValue HERE to prevent NaN errors
+    const userDefinedTotal = getSafeValue(propertyData.assumptions.downPaymentShare) +
+      getSafeValue(propertyData.assumptions.personalLoan1Share) +
+      getSafeValue(propertyData.assumptions.personalLoan2Share);
+
+    // Include Home Loan in the total calculation safely
+    const currentTotal = userDefinedTotal + getSafeValue(propertyData.assumptions.homeLoanShare);
+
+    const isError = currentTotal !== 100; // Simpler check for exactly 100%
     return (
       <div className="mb-5 ">
         <div className="glass-card mb-4 ps-4 mt-4 pt-4">
@@ -628,7 +626,7 @@ const PropertyComparison = () => {
 
             {/* Property Management */}
             <div className="mb-4 ps-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-building me-2"></i>
                 Property Management
               </h5>
@@ -688,7 +686,7 @@ const PropertyComparison = () => {
 
             {/* Property Basic Information */}
             <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-info-circle me-2"></i>
                 Common Property Information
               </h5>
@@ -729,7 +727,7 @@ const PropertyComparison = () => {
 
             {/* Payment Plan Selection */}
             <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-credit-card me-2"></i>
                 Payment Plan
               </h5>
@@ -780,10 +778,17 @@ const PropertyComparison = () => {
                     </div>
                     <div className="col-md-3">
                       <label className="form-label">Home Loan (%)</label>
-                      <div className="form-control bg-light">
-                        {100 - propertyData.assumptions.downPaymentShare - propertyData.assumptions.personalLoan1Share - propertyData.assumptions.personalLoan2Share}%
-                      </div>
-                      <small className="text-muted">Auto-calculated</small>
+                      <input
+                        type="number"
+                        className="form-control"
+                        min="0"
+                        max="80"
+                        value={propertyData.assumptions.homeLoanShare}
+                        // ⬇️ ADDED PLACEHOLDER
+                        placeholder="e.g. 80"
+                        onChange={(e) => handleAssumptionChange('homeLoanShare', e.target.value)}
+                      />
+                      <small className="text-muted">Bank Funding (Max 80%)</small>
                     </div>
                     <div className="col-md-3">
                       <label className="form-label">Personal Loan 1 (%)</label>
@@ -808,22 +813,32 @@ const PropertyComparison = () => {
                       />
                     </div>
                   </div>
-                  <div className="mt-3 alert alert-warning">
-                    <small>
-                      <i className="bi bi-exclamation-triangle me-2"></i>
-                      Total must be 100%. Current total: {propertyData.assumptions.downPaymentShare +
-                        propertyData.assumptions.personalLoan1Share +
-                        propertyData.assumptions.personalLoan2Share +
-                        (100 - propertyData.assumptions.downPaymentShare - propertyData.assumptions.personalLoan1Share - propertyData.assumptions.personalLoan2Share)}%
-                    </small>
-                  </div>
+                  {/* 2. Update the JSX to use the variable */}
+                  {isError && (
+                    <div className="mt-3 alert alert-danger">
+                      <small>
+                        <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Error:</strong> Your inputs total {userDefinedTotal}%. They cannot exceed 100%.
+                      </small>
+                    </div>
+                  )}
+
+                  {/* Optional: Show Success/Info if valid */}
+                  {!isError && (
+                    <div className="mt-3 alert alert-info">
+                      <div className="d-flex justify-content-between">
+                        <small><i className="bi bi-check-circle me-2"></i>Total Allocation</small>
+                        <small className="fw-bold">{currentTotal}%</small>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
             {/* Estimated Possession */}
             <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-calendar-date me-2"></i>
                 Estimated Possession Timeline
               </h5>
@@ -855,7 +870,7 @@ const PropertyComparison = () => {
 
             {/* Home Loan Information */}
             <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-bank me-2"></i>
                 Home Loan Details
               </h5>
@@ -912,7 +927,7 @@ const PropertyComparison = () => {
 
             {/* Personal Loan 1 Information */}
             <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-cash-coin me-2"></i>
                 Personal Loan 1 Details
               </h5>
@@ -970,7 +985,7 @@ const PropertyComparison = () => {
 
             {/* Personal Loan 2 Information */}
             <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-cash-coin me-2"></i>
                 Personal Loan 2 Details
               </h5>
@@ -1023,7 +1038,7 @@ const PropertyComparison = () => {
             {/* CLP Specific Details */}
             {propertyData.paymentPlan === 'clp' && (
               <div className="mb-4 ps-4 pe-4">
-                <h5 className="fw-bold mb-3">
+                <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
                   <i className="bi bi-building me-2"></i>
                   CLP Construction Details
                 </h5>
@@ -1071,7 +1086,7 @@ const PropertyComparison = () => {
 
             {/* Exit Price Scenarios */}
             <div className="mb-4 ps-4 pe-4 mt-4">
-              <h5 className="fw-bold mb-3">
+              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
                 <i className="bi bi-graph-up me-2"></i>
                 Exit Price Scenarios
               </h5>
@@ -1362,7 +1377,7 @@ const PropertyComparison = () => {
         {/* Comparison Table */}
         <div className="glass-card mb-5 ps-3 pt-3 pe-3">
           <div className="card-header">
-            <h5 className="mb-0">
+            <h5 className="mb-0 pb-2 border-bottom border-secondary border-opacity-25">
               <i className="bi bi-table me-2"></i>
               Exit Price Comparison
             </h5>
