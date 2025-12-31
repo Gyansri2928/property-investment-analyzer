@@ -10,7 +10,7 @@ import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import EmailVerification from './pages/EmailVerification';
 import MiniWeather from './components/MiniWeather';
-import ThemeToggle from './components/ThemeToggle'; 
+import ThemeToggle from './components/ThemeToggle';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -23,7 +23,7 @@ function App() {
     const savedTheme = localStorage.getItem('theme') || 'light';
     setTheme(savedTheme);
     document.documentElement.setAttribute('data-theme', savedTheme);
-    
+
     // Also add class to body for backward compatibility
     if (savedTheme === 'dark') {
       document.body.classList.add('dark-theme');
@@ -37,14 +37,14 @@ function App() {
     const newTheme = theme === 'light' ? 'dark' : 'light';
     setTheme(newTheme);
     document.documentElement.setAttribute('data-theme', newTheme);
-    
+
     // Update body class
     if (newTheme === 'dark') {
       document.body.classList.add('dark-theme');
     } else {
       document.body.classList.remove('dark-theme');
     }
-    
+
     // Save to localStorage
     localStorage.setItem('theme', newTheme);
   };
@@ -56,7 +56,7 @@ function App() {
     console.log('Firebase API Key Present:', !!process.env.REACT_APP_FIREBASE_API_KEY);
     console.log('Firebase Project ID Present:', !!process.env.REACT_APP_FIREBASE_PROJECT_ID);
     console.log('All Environment Variables:', {
-      REACT_APP_FIREBASE_API_KEY: process.env.REACT_APP_FIREBASE_API_KEY 
+      REACT_APP_FIREBASE_API_KEY: process.env.REACT_APP_FIREBASE_API_KEY
         ? '✓ Loaded (first 10 chars): ' + process.env.REACT_APP_FIREBASE_API_KEY.substring(0, 10) + '...'
         : '✗ Missing',
       REACT_APP_FIREBASE_AUTH_DOMAIN: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN || '✗ Missing',
@@ -68,25 +68,25 @@ function App() {
   // Check auth state on mount
   useEffect(() => {
     config.logConfig();
-    
+
     console.log('Firebase Auth Object:', auth ? '✓ Loaded' : '✗ Missing');
     console.log('Firebase App Name:', auth?.app?.name || 'Unknown');
-    
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       console.log('Auth State Changed:', currentUser ? `User: ${currentUser.email}` : 'No user');
-      
+
       setUser(currentUser);
-      
+
       if (currentUser) {
         setEmailVerified(currentUser.emailVerified);
-        
+
         console.log('User Details:', {
           email: currentUser.email,
           emailVerified: currentUser.emailVerified,
           uid: currentUser.uid.substring(0, 8) + '...',
           provider: currentUser.providerData[0]?.providerId
         });
-        
+
         if (!currentUser.emailVerified) {
           console.log('⚠️ User email is not verified');
         } else {
@@ -96,7 +96,7 @@ function App() {
         setEmailVerified(false);
         console.log('👤 No user logged in');
       }
-      
+
       setLoading(false);
     }, (error) => {
       console.error('🔥 Firebase Auth Error:', error);
@@ -104,7 +104,7 @@ function App() {
       console.error('Error Message:', error.message);
       setLoading(false);
     });
-    
+
     return () => {
       console.log('🔄 Cleaning up auth listener');
       unsubscribe();
@@ -131,7 +131,7 @@ function App() {
           </div>
           <p className="mt-3">Loading Property Investment Analyzer...</p>
           <small className="text-muted d-block mt-2">
-            Environment: {process.env.NODE_ENV} | 
+            Environment: {process.env.NODE_ENV} |
             Firebase: {auth ? 'Initialized' : 'Loading...'} |
             Theme: {theme}
           </small>
@@ -140,7 +140,7 @@ function App() {
     );
   }
 
-// Main App Content Component
+  // Main App Content Component
   const MainAppContent = () => (
     <div className="App">
       {/* 🔍 TEMPORARY: Debug banner */}
@@ -150,12 +150,12 @@ function App() {
             <div className="d-flex justify-content-between align-items-center">
               <div>
                 <i className="fas fa-bug me-1"></i>
-                DEBUG: {process.env.NODE_ENV} | 
-                Firebase: {auth?.app?.name || 'Not loaded'} | 
+                DEBUG: {process.env.NODE_ENV} |
+                Firebase: {auth?.app?.name || 'Not loaded'} |
                 Env Vars: {process.env.REACT_APP_FIREBASE_API_KEY ? 'Loaded' : 'Missing'} |
                 Theme: {theme}
               </div>
-              <button 
+              <button
                 className="btn btn-sm btn-outline-light"
                 onClick={() => {
                   console.log('📊 Current State:', { user, emailVerified, loading, theme });
@@ -168,14 +168,14 @@ function App() {
           </div>
         </div>
       )}
-      
+
       <header className="app-header">
         <div className="container">
           <div className="header-content">
             <div className="logo-title">
-              <img 
-                src="/logo_124.png" 
-                alt="Property Investment Analyzer Logo" 
+              <img
+                src="/logo_124.png"
+                alt="Property Investment Analyzer Logo"
                 className="app-logo"
               />
               <div className="title-section">
@@ -185,24 +185,24 @@ function App() {
                 <p className="app-subtitle">
                   Compare and analyze property investments with detailed financial breakdowns
                 </p>
-               <div className="environment-badge">
-   {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
-  {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
- 
-  
-</div>
+                <div className="environment-badge">
+                  {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
+                  {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
+
+
+                </div>
 
               </div>
             </div>
-            
+
             {/* RIGHT SIDE: Theme Toggle + Mini Weather + User Info */}
             <div className="d-flex align-items-center gap-3">
               {/* Theme Toggle */}
               <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-              
+
               {/* Mini Weather Widget */}
               <MiniWeather />
-              
+
               {/* User Info */}
               {user && (
                 <div className="user-info">
@@ -220,7 +220,7 @@ function App() {
                           </span>
                         )}
                       </div>
-                      <button 
+                      <button
                         onClick={handleSignOut}
                         className="btn btn-sm btn-outline-light mt-1"
                       >
@@ -237,7 +237,7 @@ function App() {
           </div>
         </div>
       </header>
-      
+
       {user && !emailVerified && (
         <div className="verification-banner bg-warning text-dark py-2">
           <div className="container">
@@ -247,7 +247,7 @@ function App() {
                 Please verify your email address to access all features.
                 Check your inbox for the verification email.
               </div>
-              <button 
+              <button
                 className="btn btn-sm btn-outline-dark"
                 onClick={() => {
                   console.log('🔄 Attempting to resend verification email to:', user.email);
@@ -260,7 +260,7 @@ function App() {
           </div>
         </div>
       )}
-      
+
       <main className="app-main">
         <div className="container">
           {user ? (
@@ -280,7 +280,7 @@ function App() {
                     Check your inbox for the verification link we sent to <strong>{user.email}</strong>.
                   </p>
                   <div className="mt-3">
-                    <button 
+                    <button
                       className="btn btn-primary me-2"
                       onClick={() => {
                         console.log('🔄 Manual resend requested for:', user.email);
@@ -288,7 +288,7 @@ function App() {
                     >
                       <i className="fas fa-redo me-1"></i> Resend Verification Email
                     </button>
-                    <button 
+                    <button
                       className="btn btn-outline-secondary"
                       onClick={handleSignOut}
                     >
@@ -305,7 +305,7 @@ function App() {
                    KEPT: The centered layout and the Auth component itself.
                 */}
                 <Auth />
-                
+
                 {/* Optional footer text kept clean below the form */}
                 <div className="text-center mt-3 text-muted small">
                   <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
@@ -320,25 +320,37 @@ function App() {
           )}
         </div>
       </main>
-      
-    <footer className="app-footer" style={{ backgroundColor: '#50C878', color: '#FFFFFF' }}>
-  <div className="container">
-    <p style={{ margin: 0, fontWeight: 'bold' }}>
-      © {new Date().getFullYear()} Property Investment Analyzer • v{config.version}
-    </p>
-    <small style={{ opacity: 0.9, fontSize: '0.85rem' }}>
-      {config.isProduction() ? 'Production Environment' : 'Development Environment'} • 
-      Currency: {config.currency}
-      {user && ` • Logged in as: ${user.email}`}
-      {user && ` • Email Status: ${emailVerified ? 'Verified' : 'Pending Verification'}`}
-      {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
-    </small>
-  </div>
-</footer>
+
+      <footer className="app-footer" style={{ backgroundColor: '#50C878', color: '#FFFFFF' }}>
+        <div className="container text-center py-2"> {/* Added spacing (py-3) and centering */}
+
+          {/* 1. Links (Top & Prominent) */}
+          <div className="mb-3">
+            <a href="#" className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75">Privacy Policy</a>
+            <span className="opacity-25">|</span>
+            <a href="#" className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75">Terms of Service</a>
+            <span className="opacity-25">|</span>
+            <a href="#" className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75">Support</a>
+          </div>
+
+          {/* 2. Copyright (Middle & Distinct) */}
+          <div className="mb-2 opacity-90">
+            <small className="fw-bold" style={{ letterSpacing: '0.5px' }}>
+              © {new Date().getFullYear()} Property Investment Analyzer • All Rights Reserved
+            </small>
+          </div>
+
+          {/* 3. Technical Details (Bottom, Smallest & Faintest) */}
+          <div className="opacity-50" style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
+            v{config.version} • {config.isProduction() ? 'Production' : 'Dev'} Env
+            {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
+          </div>
+        </div>
+      </footer>
     </div>
   );
 
-   return (
+  return (
     <Router>
       <Routes>
         <Route path="/" element={<MainAppContent />} />

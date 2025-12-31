@@ -2,9 +2,9 @@
 
 echo "🏠 PROPERTY INVESTMENT ANALYZER - PRODUCTION DEPLOYMENT"
 echo "========================================================"
-echo "Repository: https://github.com/Ashish22june/property-comparison"
-echo "Vercel:     https://vercel.com/ashish22june-4664s-projects/property-comparison"
-echo "Live URL:   https://property-comparison-lqggsphbn-ashish22june-4664s-projects.vercel.app"
+echo "Repository: https://github.com/Gyansri2928/property-investment-analyzer.git"
+echo "Vercel:     https://vercel.com/gyan-sagar-srivastavas-projects/property-investment-analyzer"
+echo "Live URL:   https://property-investment-analyzer-six.vercel.app"
 echo ""
 
 # Colors for output
@@ -68,7 +68,7 @@ fi
 
 # Step 6: Push to GitHub
 echo -e "\n${YELLOW}6. Pushing to GitHub...${NC}"
-git push origin main
+git push personal main
 check_status
 
 # Step 7: Deployment info
@@ -83,10 +83,10 @@ echo ""
 echo "${YELLOW}⏳ Vercel is now automatically deploying...${NC}"
 echo ""
 echo "${YELLOW}📡 Monitor deployment at:${NC}"
-echo "https://vercel.com/ashish22june-4664s-projects/property-comparison/deployments"
+echo "https://vercel.com/gyan-sagar-srivastavas-projects/property-investment-analyzer/deployments"
 echo ""
 echo "${YELLOW}🌐 Your live site:${NC}"
-echo "https://property-comparison-lqggsphbn-ashish22june-4664s-projects.vercel.app"
+echo "https://property-investment-analyzer-six.vercel.app/"
 echo ""
 echo "${YELLOW}⏰ Estimated time: 1-3 minutes${NC}"
 echo ""
