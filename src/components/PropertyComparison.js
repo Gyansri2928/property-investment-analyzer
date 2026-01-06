@@ -1,11 +1,52 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import './PropertyComparison.css';
 
 // ===================== CONSTANTS =====================
+// ... existing DEFAULT_PROPERTY constant ...
+
 const DEFAULT_PROPERTY = {
   id: 1,
-  size: 1428,     // <--- Change this ONCE here
+  size: 1428,
   exitPrice: 6000
+};
+
+// 1. CONSTANT: Initial State for Property Data
+const INITIAL_PROPERTY_DATA = {
+  purchasePrice: '',
+  otherCharges: '',
+  stampDuty: '',
+  exitPrices: [6000],
+  properties: [
+    {
+      id: DEFAULT_PROPERTY.id,
+      size: DEFAULT_PROPERTY.size,
+      name: '',
+      location: '',
+      rating: 0,
+      isHighlighted: true,
+      possessionMonths: ''
+    }
+  ],
+  paymentPlan: 'clp',
+  assumptions: {
+    homeLoanRate: 8, homeLoanTerm: 20, homeLoanStartMonth: 25, homeLoanShare: '',
+    personalLoan1Rate: 11, personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
+    personalLoan2Rate: 11, personalLoan2Term: 7, personalLoan2StartMonth: 30, personalLoan2Share: 10,
+    downPaymentShare: 0,
+    investmentPeriod: 3, clpDurationYears: 2.5, bankDisbursementStartMonth: 3, bankDisbursementInterval: 3,
+    possessionMonths: 24
+  }
+};
+
+// 2. CONSTANT: Initial State for User Selections
+const INITIAL_USER_SELECTIONS = {
+  selectedPropertyId: DEFAULT_PROPERTY.id,
+  selectedExitPrice: DEFAULT_PROPERTY.exitPrice,
+  selectedYears: 3,
+  selectedPropertySize: DEFAULT_PROPERTY.size,
+  scenarioSize: DEFAULT_PROPERTY.size,
+  scenarioExitPrice: DEFAULT_PROPERTY.exitPrice,
+  scenarioExitPrices: [6000, 7000, 8000]
 };
 
 // ===================== 1. PURE UTILITIES (Moved Outside for Speed) =====================
@@ -59,11 +100,11 @@ const calculateMonthlyIDCEMI = (homeLoanAmount, annualRate, constructionMonths) 
 // ===================== 2. UI TEMPLATES (Stateless) =====================
 
 const renderMetricCard = (label, value, icon, color) => (
-  <div className="col-md-3">
+  <div className="col-6 col-md-3">
     <div className="metric-card glass-card text-center h-100 p-3">
       {/* Fixed width/height ensures a perfect circle */}
-      <div 
-        className={`rounded-circle bg-${color} bg-opacity-20 d-flex align-items-center justify-content-center mx-auto mb-3`} 
+      <div
+        className={`rounded-circle bg-${color} bg-opacity-20 d-flex align-items-center justify-content-center mx-auto mb-3`}
         style={{ width: '60px', height: '60px' }}
       >
         <i className={`bi ${icon} text-${color} fs-3`}></i>
@@ -75,7 +116,7 @@ const renderMetricCard = (label, value, icon, color) => (
 );
 
 const renderStatCard = (label, value, subtext, color, colSize = 4) => (
-  <div className={`col-md-${colSize}`}>
+  <div className={`col-6 col-md-${colSize}`}>
     <div className={`p-3 bg-${color} text-white rounded text-center h-100`}>
       <small className="text-white opacity-75">{label}</small>
       <div className="fw-bold fs-4 my-1">{value}</div>
@@ -237,56 +278,59 @@ const PropertyComparison = () => {
   // --- STATE ---
 
   const [activeTab, setActiveTab] = useState('inputs');
+  // New State for Wizard Steps
+  const [currentStep, setCurrentStep] = useState(1);
   const [showDataEnteredAlert, setShowDataEnteredAlert] = useState(false);
 
-  // 1. Input Data States (Now using DEFAULT_PROPERTY)
-  const [propertyData, setPropertyData] = useState({
-    purchasePrice: '',
-    otherCharges: '',
-    stampDuty: '',
-    exitPrices: [6000, 7000, 8000],
-    properties: [
-      {
-        id: DEFAULT_PROPERTY.id,
-        size: DEFAULT_PROPERTY.size, // <--- Loaded from Constant
-        name: '',
-        location: '',
-        rating: 0,
-        isHighlighted: true,
-        possessionMonths: ''
-      }
-    ],
-    paymentPlan: 'clp',
-    assumptions: {
-      homeLoanRate: 8, homeLoanTerm: 20, homeLoanStartMonth: 25, homeLoanShare: '',
-      personalLoan1Rate: 11, personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
-      personalLoan2Rate: 11, personalLoan2Term: 7, personalLoan2StartMonth: 30, personalLoan2Share: 10,
-      downPaymentShare: 0,
-      investmentPeriod: 3, clpDurationYears: 2.5, bankDisbursementStartMonth: 3, bankDisbursementInterval: 3,
-      possessionMonths: 24
+  // 1. Input Data State (Load from Local Storage OR use Default)
+  const [propertyData, setPropertyData] = useState(() => {
+    try {
+      const savedData = localStorage.getItem('propertyCalc_data');
+      return savedData ? JSON.parse(savedData) : INITIAL_PROPERTY_DATA;
+    } catch (e) {
+      console.error("Failed to load property data", e);
+      return INITIAL_PROPERTY_DATA;
     }
   });
 
 
-  // 2. Analysis Selection States (Synced with DEFAULT_PROPERTY)
-  const [userSelections, setUserSelections] = useState({
-    selectedPropertyId: DEFAULT_PROPERTY.id,
-    selectedExitPrice: DEFAULT_PROPERTY.exitPrice,
-    selectedYears: 3,
-
-    // FIX: No more hardcoded 1428. Both start identical.
-    selectedPropertySize: DEFAULT_PROPERTY.size,
-    scenarioSize: DEFAULT_PROPERTY.size,
-
-    scenarioExitPrice: DEFAULT_PROPERTY.exitPrice,
-    scenarioExitPrices: [6000, 7000, 8000]
+  // 2. Analysis Selection State (Load from Local Storage OR use Default)
+  const [userSelections, setUserSelections] = useState(() => {
+    try {
+      const savedSelections = localStorage.getItem('propertyCalc_selections');
+      return savedSelections ? JSON.parse(savedSelections) : INITIAL_USER_SELECTIONS;
+    } catch (e) {
+      console.error("Failed to load selections", e);
+      return INITIAL_USER_SELECTIONS;
+    }
   });
+
+  // --- PERSISTENCE EFFECTS ---
+
+  // Save 'propertyData' whenever it changes
+  useEffect(() => {
+    localStorage.setItem('propertyCalc_data', JSON.stringify(propertyData));
+  }, [propertyData]);
+
+  // Save 'userSelections' whenever it changes
+  useEffect(() => {
+    localStorage.setItem('propertyCalc_selections', JSON.stringify(userSelections));
+  }, [userSelections]);
 
 
   // ===================== LOGIC ENGINE (useMemo) =====================
   // This replaces all your useCallback and useEffect logic for calculations.
   // It automatically recalculates ONLY when propertyData or userSelections change.
 
+  const handleResetData = () => {
+    if (window.confirm("Are you sure you want to reset all data to default values?")) {
+      setPropertyData(INITIAL_PROPERTY_DATA);
+      setUserSelections(INITIAL_USER_SELECTIONS);
+      localStorage.removeItem('propertyCalc_data');
+      localStorage.removeItem('propertyCalc_selections');
+      alert("Data reset successfully.");
+    }
+  };
   const calculatedData = useMemo(() => {
 
     // 1. Internal Helper: Performs the core financial math
@@ -577,7 +621,7 @@ const PropertyComparison = () => {
     const newProperties = [...propertyData.properties];
 
     // Parse the value correctly
-    const newValue = field === 'name' || field === 'location' ? value : parseFloat(value) || 0;
+    const newValue = field === 'name' || field === 'location' ? value : parseFloat(value) || '';
 
     // Update the list
     newProperties[index][field] = newValue;
@@ -638,6 +682,10 @@ const PropertyComparison = () => {
         newAssumptions.personalLoan2Share = 10;
         newAssumptions.downPaymentShare = 0;
         newAssumptions.homeLoanShare = 80;
+        if (newAssumptions.possessionMonths === 0) {
+          newAssumptions.possessionMonths = 24;
+          newAssumptions.homeLoanStartMonth = 25;
+        }
       }
       else if (plan === '80-20') {
         // 80% Home Loan, 20% Self Funding (PL1)
@@ -687,600 +735,652 @@ const PropertyComparison = () => {
     const currentTotal = userDefinedTotal + getSafeValue(propertyData.assumptions.homeLoanShare);
 
     const isError = currentTotal !== 100; // Simpler check for exactly 100%
+    // --- WIZARD CONFIGURATION ---
+    const steps = [
+      { id: 1, label: "Property Details", icon: "bi-building" },
+      { id: 2, label: "Payment Plan", icon: "bi-credit-card" },
+      { id: 3, label: "Loan Config", icon: "bi-bank" },
+      { id: 4, label: "Exit Scenarios", icon: "bi-graph-up-arrow" }
+    ];
+
+    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, steps.length));
+    const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
+
+    // --- STEPPER HEADER COMPONENT ---
+    const renderStepper = () => (
+      <div className="mb-3 position-relative">
+        {/* Connecting Line (Background) */}
+        <div className="position-absolute top-0 start-0 translate-middle-y"
+          style={{
+            height: '2px',
+            backgroundColor: '#e9ecef',
+            zIndex: 0
+          }}
+        ></div>
+
+        {/* Active Line (Progress) */}
+        <div
+          className="position-absolute top-50 start-0 translate-middle-y bg-primary transition-all"
+          style={{
+            height: '2px',
+            width: `${((currentStep - 1) / (steps.length - 1)) * 100}%`,
+            zIndex: 0,
+            transition: 'width 0.4s ease'
+          }}
+        ></div>
+
+        {/* Steps */}
+        <div className="d-flex justify-content-between position-relative" style={{ zIndex: 1 }}>
+          {steps.map((step) => {
+            const isActive = step.id === currentStep;
+            const isCompleted = step.id < currentStep;
+
+            return (
+              <div key={step.id} className="text-center" style={{ width: '100px' }}>
+                <div
+                  className={`rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 shadow-sm ${isActive ? 'bg-primary text-white scale-110' :
+                    isCompleted ? 'bg-success text-white' : 'bg-white text-muted border'
+                    }`}
+                  style={{
+                    width: '${((currentStep - 1) / (steps.length - 1)) * 100}%',
+                    height: '40px',
+                    transition: 'all 0.3s ease',
+                    boxShadow: isActive ? '0 0 0 4px rgba(13, 110, 253, 0.2)' : 'none'
+                  }}
+                  onClick={() => setCurrentStep(step.id)}
+                >
+                  {isCompleted ? <i className="bi bi-check-lg fw-bold"></i> : <span className="fw-bold">{step.id}</span>}
+                </div>
+                <small className={`d-block fw-bold ${isActive ? 'text-primary' : 'text-muted'}`} style={{ fontSize: '0.75rem' }}>
+                  {step.label}
+                </small>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+
+    // --- NAVIGATION FOOTER ---
+    const renderNavButtons = () => (
+      <div className="d-flex justify-content-between mt-5 pt-3 border-top">
+        {/* PREVIOUS BUTTON */}
+        {/* Disabled if on Step 1 */}
+        <button
+          className="btn btn-outline-secondary rounded-pill px-4"
+          onClick={prevStep}
+          disabled={currentStep === 1}
+        >
+          <i className="bi bi-arrow-left me-2"></i> Previous
+        </button>
+
+        {/* NEXT / ANALYZE BUTTON */}
+        {/* If not last step, show "Next". If last step, show "Analyze". */}
+        {currentStep < steps.length ? (
+          <button className="btn btn-primary rounded-pill px-4" onClick={nextStep}>
+            Next Step <i className="bi bi-arrow-right ms-2"></i>
+          </button>
+        ) : (
+          <button className="btn btn-primary rounded-pill px-5 shadow-lg" onClick={handleAnalyzeClick}>
+            Analyze Property <i className="bi bi-graph-up ms-2"></i>
+          </button>
+        )}
+      </div>
+    );
+
     return (
       <div className="mb-5 ">
         <div className="glass-card mb-4 ps-4 mt-4 pt-4">
           <div>
-            <h2 className="fw-bold mb-2 gradient-text">
+            <h2 className="fw-bold mb-2 gradient-text ps-4 pt-2">
               <i className="bi bi-input-cursor me-3"></i>
               Input Parameters
             </h2>
-            <p className="text-muted mb-0">
+            <p className="text-muted mb-0 ps-4">
               Define your property details, payment plans, and loan assumptions
             </p>
           </div>
+          {/* Stepper Header */}
+          <div className="px-lg-5 mt-5">
+            {renderStepper()}
+          </div>
           <div className="card-body pt-4 pe-4">
-            <div className="alert alert-info glass-card mb-4">
-              <div className="d-flex align-items-center">
-                <i className="bi bi-info-circle-fill fs-4 text-primary me-3"></i>
-                <div>
-                  <h6 className="mb-1">How to use this tool:</h6>
-                  <p className="mb-0 small">Enter property details and assumptions below. Calculations update in real-time.</p>
-                </div>
-              </div>
-            </div>
 
             {/* Property Management */}
-            <div className="mb-4 ps-4">
-              <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-building me-2"></i>
-                Property Management
-              </h5>
-
-              <div className="d-flex justify-content-between align-items-center mb-3">
-                <h6 className="mb-0">Properties ({propertyData.properties.length})</h6>
-                <button
-                  className="btn btn-success btn-sm"
-                  onClick={handleAddProperty}
-                >
-                  <i className="bi bi-plus-circle me-1"></i>
-                  Add Property
-                </button>
-              </div>
-
-              {/* REFACTORED LOOP START */}
-              <div className="row g-3">
-                {propertyData.properties.map((property, index) => (
-                  <div key={property.id} className="col-md-6 col-lg-4"> {/* Applied the centered layout fix too */}
-                    <div className="card h-100 shadow-sm border-0">
-
-                      {/* Card Header */}
-                      <div className="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                        <span className="badge bg-primary px-3 py-2">Property #{property.id}</span>
-                        {propertyData.properties.length > 1 && (
-                          <button
-                            className="btn btn-outline-danger btn-sm rounded-circle"
-                            onClick={() => handleRemoveProperty(property.id)}
-                            style={{ width: '32px', height: '32px', padding: 0 }}
-                          >
-                            <i className="bi bi-trash"></i>
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Card Body - NOW USING THE HELPER FUNCTION */}
-                      <div className="card-body p-4">
-                        {renderPropertyInput(index, property, "Property Name", "name", "text")}
-                        {renderPropertyInput(index, property, "Location", "location", "text")}
-
-                        <div className="row">
-                          <div className="col-md-6">
-                            {renderPropertyInput(index, property, "Size (sq.ft)", "size", "number")}
+            {currentStep === 1 && (
+              <div className="animate-fade-in">
+                {/* 1. Property Management Section */}
+                <div className="mb-4 ps-4">
+                  <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
+                    <i className="bi bi-building me-2"></i>Property Management
+                  </h5>
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="mb-0">Properties ({propertyData.properties.length})</h6>
+                    <button className="btn btn-success btn-sm" onClick={handleAddProperty}>
+                      <i className="bi bi-plus-circle me-1"></i> Add Property
+                    </button>
+                  </div>
+                  <div className="row g-3">
+                    {propertyData.properties.map((property, index) => (
+                      <div key={property.id} className="col-md-6 col-lg-4">
+                        <div className="card h-100 shadow-sm border-0">
+                          <div className="card-header bg-white d-flex justify-content-between align-items-center py-3">
+                            <span className="badge bg-primary px-3 py-2">Property #{property.id}</span>
+                            {propertyData.properties.length > 1 && (
+                              <button className="btn btn-outline-danger btn-sm rounded-circle" onClick={() => handleRemoveProperty(property.id)} style={{ width: '32px', height: '32px', padding: 0 }}>
+                                <i className="bi bi-trash"></i>
+                              </button>
+                            )}
                           </div>
-                          <div className="col-md-6">
-                            {renderPropertyInput(index, property, "Possession (Months)", "possessionMonths", "number", "Months until possession")}
+                          <div className="card-body p-4">
+                            {renderPropertyInput(index, property, "Property Name", "name", "text")}
+                            {renderPropertyInput(index, property, "Location", "location", "text")}
+                            <div className="row">
+                              <div className="col-md-6">{renderPropertyInput(index, property, "Size (sq.ft)", "size", "number")}</div>
+                              <div className="col-md-6">{renderPropertyInput(index, property, "Possession (Months)", "possessionMonths", "number", "Months until possession")}</div>
+                            </div>
                           </div>
                         </div>
                       </div>
-
-                    </div>
-                  </div>
-                ))}
-              </div>
-              {/* REFACTORED LOOP END */}
-            </div>
-
-            {/* Property Basic Information */}
-            <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-info-circle me-2"></i>
-                Common Property Information
-              </h5>
-              <div className="row g-3">
-                <div className="col-md-6">
-                  <label className="form-label">Purchase Price (₹/sq.ft)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={propertyData.purchasePrice}
-                    placeholder="e.g. 5000"  // <--- Added Hint
-                    onChange={(e) => handleInputChange('purchasePrice', parseFloat(e.target.value))}
-                  />
-                </div>
-                {/* 2. NEW FIELD: Other Charges */}
-                <div className="col-md-6">
-                  <label className="form-label">Other Charges (Lumpsum)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={propertyData.otherCharges}
-                    placeholder="e.g. 500000"
-                    onChange={(e) => handleInputChange('otherCharges', parseFloat(e.target.value))}
-                  />
-                  <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-                    GST, Parking, Club Membership, etc.
-                  </small>
-                </div>
-                {/* 3. NEW FIELD: Stamp Duty (%) */}
-                <div className="col-md-6">
-                  <label className="form-label">Stamp Duty (%)</label>
-                  <div className="input-group">
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={propertyData.stampDuty}
-                      placeholder="e.g. 5"
-                      min="0"
-                      max="100"
-                      onChange={(e) => handleInputChange('stampDuty', parseFloat(e.target.value))}
-                    />
-                    <span className="input-group-text">%</span>
-                  </div>
-                  <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-                    Govt. registration charges (usually 5-8%)
-                  </small>
-                </div>
-                <div className="col-md-6">
-                  <label className="form-label">Select Property for Analysis</label>
-                  <select
-                    className="form-select"
-                    value={userSelections.selectedPropertyId}
-                    onChange={(e) => {
-                      const propId = parseInt(e.target.value);
-                      handleSelectionUpdate('selectedPropertyId', propId);
-                      const selectedProp = propertyData.properties.find(p => p.id === propId);
-                      if (selectedProp) {
-                        handleSelectionUpdate('selectedPropertySize', selectedProp.size);
-                      }
-                    }}
-                  >
-                    {propertyData.properties.map(property => (
-                      <option key={property.id} value={property.id}>
-                        {property.name} ({property.size} sq.ft)
-                      </option>
                     ))}
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            {/* Payment Plan Selection */}
-            <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-credit-card me-2"></i>
-                Payment Plan
-              </h5>
-              <div className="row g-3">
-                <div className="col-md-6">
-                  <label className="form-label">Payment Plan Type</label>
-                  <div className="input-group">
-                    <select
-                      className="form-select"
-                      style={{ backgroundImage: 'none' }}
-                      value={propertyData.paymentPlan}
-                      onChange={(e) => handlePaymentPlanChange(e.target.value)}
-                    >
-                      <option value="clp">CLP (Construction Linked Plan)</option>
-                      <option value="80-20">80%-20% (80% HL, 20% Self)</option>
-                      <option value="25-75">25%-75% (75% HL, 25% Self)</option>
-                      <option value="rtm">Ready to move</option>
-                      <option value="custom">Custom (User Defined)</option>
-                    </select>
-                    <span className="input-group-text bg-white text-secondary border-start-0">
-                      <i className="bi bi-chevron-down"></i>
-                    </span>
                   </div>
                 </div>
-                <div className="col-md-6">
-                  <label className="form-label">Holding Period (Years)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={propertyData.assumptions.investmentPeriod}
-                    onChange={(e) => handleAssumptionChange('investmentPeriod', e.target.value)}
-                  />
-                </div>
-              </div>
 
-              {/* Custom Payment Plan Options */}
-              {propertyData.paymentPlan === 'custom' && (
-                <div className="mt-4 p-3 bg-light rounded">
-                  <h6 className="fw-bold mb-3">
-                    <i className="bi bi-sliders me-2"></i>
-                    Custom Payment Plan Configuration
-                  </h6>
+                {/* 2. Common Property Information Section */}
+                <div className="mb-4 ps-4 pe-4">
+                  <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
+                    <i className="bi bi-info-circle me-2"></i>Common Property Information
+                  </h5>
                   <div className="row g-3">
-                    <div className="col-md-3">
-                      <label className="form-label">Down Payment (%)</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        min="0"
-                        max="100"
-                        value={propertyData.assumptions.downPaymentShare}
-                        onChange={(e) => handleAssumptionChange('downPaymentShare', e.target.value)}
-                      />
-                      <small className="text-muted">Cash payment (no loan)</small>
+                    <div className="col-md-6">
+                      <label className="form-label">Purchase Price (₹/sq.ft)</label>
+                      <input type="number" className="form-control" value={propertyData.purchasePrice} placeholder="e.g. 5000" onChange={(e) => handleInputChange('purchasePrice', parseFloat(e.target.value))} />
                     </div>
-                    <div className="col-md-3">
-                      <label className="form-label">Home Loan (%)</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        min="0"
-                        max="80"
-                        value={propertyData.assumptions.homeLoanShare}
-                        // ⬇️ ADDED PLACEHOLDER
-                        placeholder="e.g. 80"
-                        onChange={(e) => handleAssumptionChange('homeLoanShare', e.target.value)}
-                      />
-                      <small className="text-muted">Bank Funding (Max 80%)</small>
+                    <div className="col-md-6">
+                      <label className="form-label">Other Charges (Lumpsum)</label>
+                      <input type="number" className="form-control" value={propertyData.otherCharges} placeholder="e.g. 500000" onChange={(e) => handleInputChange('otherCharges', parseFloat(e.target.value))} />
+                      <small className="text-muted" style={{ fontSize: '0.75rem' }}>GST, Parking, Club Membership, etc.</small>
                     </div>
-                    <div className="col-md-3">
-                      <label className="form-label">Personal Loan 1 (%)</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        min="0"
-                        max="100"
-                        value={propertyData.assumptions.personalLoan1Share}
-                        onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
-                      />
-                    </div>
-                    <div className="col-md-3">
-                      <label className="form-label">Personal Loan 2 (%)</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        min="0"
-                        max="100"
-                        value={propertyData.assumptions.personalLoan2Share}
-                        onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  {/* 2. Update the JSX to use the variable */}
-                  {isError && (
-                    <div className="mt-3 alert alert-danger">
-                      <small>
-                        <i className="bi bi-exclamation-triangle-fill me-2"></i>
-                        <strong>Error:</strong> Your inputs total {userDefinedTotal}%. They cannot exceed 100%.
-                      </small>
-                    </div>
-                  )}
-
-                  {/* Optional: Show Success/Info if valid */}
-                  {!isError && (
-                    <div className="mt-3 alert alert-info">
-                      <div className="d-flex justify-content-between">
-                        <small><i className="bi bi-check-circle me-2"></i>Total Allocation</small>
-                        <small className="fw-bold">{currentTotal}%</small>
+                    <div className="col-md-6">
+                      <label className="form-label">Stamp Duty (%)</label>
+                      <div className="input-group">
+                        <input type="number" className="form-control" value={propertyData.stampDuty} placeholder="e.g. 5" min="0" max="100" onChange={(e) => handleInputChange('stampDuty', parseFloat(e.target.value))} />
+                        <span className="input-group-text">%</span>
                       </div>
+                      <small className="text-muted" style={{ fontSize: '0.75rem' }}>Govt. registration charges (usually 5-8%)</small>
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Estimated Possession */}
-            <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-calendar-date me-2"></i>
-                Estimated Possession Timeline
-              </h5>
-              <div className="row g-3">
-                <div className="col-md-6">
-                  <label className="form-label">Estimated Possession After (Months)</label>
-                  <div className="input-group">
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={propertyData.assumptions.possessionMonths}
-                      onChange={(e) => handleAssumptionChange('possessionMonths', e.target.value)}
-                    />
-                    <span className="input-group-text">months</span>
-                  </div>
-                  <small className="text-muted">Time until you get possession of the property</small>
-                </div>
-                <div className="col-md-6">
-                  <div className="p-3 bg-light rounded">
-                    <small className="text-muted">Impact on Loans</small>
-                    <div className="fw-bold">
-                      Home Loan EMI: Starts after {propertyData.assumptions.possessionMonths} months
+                    <div className="col-md-6">
+                      <label className="form-label">Select Property for Analysis</label>
+                      <select className="form-select" value={userSelections.selectedPropertyId} onChange={(e) => {
+                        const propId = parseInt(e.target.value);
+                        handleSelectionUpdate('selectedPropertyId', propId);
+                        const selectedProp = propertyData.properties.find(p => p.id === propId);
+                        if (selectedProp) handleSelectionUpdate('selectedPropertySize', selectedProp.size);
+                      }}>
+                        {propertyData.properties.map(property => (
+                          <option key={property.id} value={property.id}>{property.name} ({property.size} sq.ft)</option>
+                        ))}
+                      </select>
                     </div>
-                    <small className="text-muted">PL1: Independent • PL2: Starts from possession</small>
                   </div>
                 </div>
-              </div>
-            </div>
-
-            {/* Home Loan Information */}
-            <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-bank me-2"></i>
-                Home Loan Details
-              </h5>
-              <div className="row g-3">
-                <div className="col-md-3">
-                  <label className="form-label">Home Loan Rate (%)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="form-control"
-                    value={propertyData.assumptions.homeLoanRate}
-                    onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
-                  />
-                </div>
-                <div className="col-md-3">
-                  <label className="form-label">
-                    Start After Possession (Current: {propertyData.assumptions.homeLoanStartMonth} months)
-                    <br />
-                    <small className="text-muted">Selected: {propertyData.assumptions.homeLoanStartMonth} months</small>
-                  </label>
-                  <input
-                    type="range"
-                    className="form-range"
-                    min="0"
-                    max="240"
-                    value={propertyData.assumptions.homeLoanStartMonth}
-                    onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
-                  />
-                  <div className="d-flex justify-content-between">
-                    <small>Month 0</small>
-                    <small>240 months</small>
+                <div className="text-center mt-4 pt-2">
+                  <button
+                    className="btn btn-sm btn-outline-danger border-10 opacity-15"
+                    onClick={handleResetData}
+                  >
+                    <i className="bi bi-arrow-counterclockwise me-2"></i>Reset All Inputs
+                  </button>
+                  <div className="text-muted extra-small mt-1" style={{ fontSize: '0.7rem' }}>
+                    Restores default values
                   </div>
-                </div>
-                <div className="col-md-3">
-                  <label className="form-label">Loan Term (Years)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={propertyData.assumptions.homeLoanTerm}
-                    onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
-                  />
-                </div>
-                <div className="col-md-3">
-                  <div className="p-3 bg-light rounded h-100">
-                    <small className="text-muted">Actual EMI Start</small>
-                    <div className="fw-bold">
-                      {/* FIX: Display Possession + Delay */}
-                      Month {parseInt(propertyData.assumptions.possessionMonths) + parseInt(propertyData.assumptions.homeLoanStartMonth)}
-                    </div>
-                    <small className="text-muted">After possession delay</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Personal Loan 1 Information */}
-            <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-cash-coin me-2"></i>
-                Personal Loan 1 Details
-              </h5>
-              <div className="row g-3">
-                <div className="col-md-3">
-                  <label className="form-label">Share of Total Cost (%)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={propertyData.assumptions.personalLoan1Share}
-                    onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
-                    disabled={propertyData.paymentPlan !== 'custom'}
-                  />
-                  {propertyData.paymentPlan !== 'custom' && (
-                    <small className="text-muted">Set by payment plan</small>
-                  )}
-                </div>
-                <div className="col-md-3">
-                  <label className="form-label">Amount</label>
-                  <div className="form-control bg-light">
-                    {formatCurrency(propertyData.properties[0]?.size * propertyData.purchasePrice * (propertyData.assumptions.personalLoan1Share / 100))}
-                  </div>
-                </div>
-                <div className="col-md-3">
-                  <label className="form-label">Personal Loan Rate (%)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="form-control"
-                    value={propertyData.assumptions.personalLoan1Rate}
-                    onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
-                  />
-                </div>
-                <div className="col-md-3">
-                  <label className="form-label">
-                    Start Month (Current: {propertyData.assumptions.personalLoan1StartMonth})
-                    <br />
-                    <small className="text-muted">Independent of possession</small>
-                  </label>
-                  <input
-                    type="range"
-                    className="form-range"
-                    min="0"
-                    max="84"
-                    value={propertyData.assumptions.personalLoan1StartMonth}
-                    onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
-                  />
-                  <div className="d-flex justify-content-between">
-                    <small>Month 0</small>
-                    <small>84 months</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Personal Loan 2 Information */}
-            <div className="mb-4 ps-4 pe-4">
-              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-cash-coin me-2"></i>
-                Personal Loan 2 Details
-              </h5>
-              <div className="row g-3">
-                <div className="col-md-3">
-                  <label className="form-label">Share of Total Cost (%)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={propertyData.assumptions.personalLoan2Share}
-                    onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
-                    disabled={propertyData.paymentPlan !== 'custom'}
-                  />
-                  {propertyData.paymentPlan !== 'custom' && (
-                    <small className="text-muted">Set by payment plan</small>
-                  )}
-                </div>
-                <div className="col-md-3">
-                  <label className="form-label">Amount</label>
-                  <div className="form-control bg-light">
-                    {formatCurrency(propertyData.properties[0]?.size * propertyData.purchasePrice * (propertyData.assumptions.personalLoan2Share / 100))}
-                  </div>
-                </div>
-                <div className="col-md-3">
-                  <label className="form-label">Personal Loan Rate (%)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="form-control"
-                    value={propertyData.assumptions.personalLoan2Rate}
-                    onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
-                    disabled={propertyData.assumptions.personalLoan2Share === 0}
-                  />
-                  {propertyData.assumptions.personalLoan2Share === 0 && (
-                    <small className="text-muted">Not applicable (0% share)</small>
-                  )}
-                </div>
-                <div className="col-md-3">
-                  <div className="p-3 bg-light rounded h-100">
-                    <small className="text-muted">PL2 Start Month</small>
-                    <div className="fw-bold">
-                      Month {propertyData.assumptions.possessionMonths}
-                    </div>
-                    <small className="text-muted">Starts from possession date</small>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* CLP Specific Details */}
-            {propertyData.paymentPlan === 'clp' && (
-              <div className="mb-4 ps-4 pe-4">
-                <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                  <i className="bi bi-building me-2"></i>
-                  CLP Construction Details
-                </h5>
-                <div className="row g-3">
-                  <div className="col-md-4">
-                    <label className="form-label">Construction Duration (Years)</label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      className="form-control"
-                      value={propertyData.assumptions.clpDurationYears}
-                      onChange={(e) => handleAssumptionChange('clpDurationYears', e.target.value)}
-                    />
-                    <small className="text-muted">Total construction period</small>
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">First Bank Disbursement (Month)</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={propertyData.assumptions.bankDisbursementStartMonth}
-                      onChange={(e) => handleAssumptionChange('bankDisbursementStartMonth', e.target.value)}
-                    />
-                    <small className="text-muted">Month when first disbursement occurs</small>
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">Disbursement Interval (Months)</label>
-                    <input
-                      type="number"
-                      className="form-control"
-                      value={propertyData.assumptions.bankDisbursementInterval}
-                      onChange={(e) => handleAssumptionChange('bankDisbursementInterval', e.target.value)}
-                    />
-                    <small className="text-muted">Months between disbursements</small>
-                  </div>
-                </div>
-                <div className="alert alert-info mt-3">
-                  <small>
-                    <i className="bi bi-info-circle me-2"></i>
-                    In CLP plans, Interest During Construction (IDC) is calculated monthly and added to the Home Loan EMI calculation.
-                  </small>
                 </div>
               </div>
             )}
 
-            {/* Exit Price Scenarios */}
-            <div className="mb-4 ps-4 pe-4 mt-4">
-              <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                <i className="bi bi-graph-up me-2"></i>
-                Exit Price Scenarios
-              </h5>
-              <div className="row g-3 mb-3">
-                <div className="col-md-6">
-                  <label className="form-label">Selected Exit Price (₹/sq.ft)</label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={userSelections.selectedExitPrice}
-                    onChange={(e) => handleSelectionUpdate('selectedExitPrice', parseFloat(e.target.value))}
-                  />
-                </div>
-                <div className="col-md-6">
-                  <div className="d-flex justify-content-between align-items-center mb-2">
-                    <label className="form-label mb-0">Scenario Exit Prices</label>
-                    <button
-                      className="btn btn-success btn-sm"
-                      onClick={handleAddExitPriceScenario}
-                    >
-                      <i className="bi bi-plus-circle me-1"></i>
-                      Add Scenario
-                    </button>
+            {/* === STEP 2: PAYMENT PLAN === */}
+            {currentStep === 2 && (
+              <div className="animate-fade-in ps-4">
+                <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
+                  <i className="bi bi-credit-card me-2"></i>Payment Plan
+                </h5>
+
+                <div className="mb-4 ps-4 pe-4">
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label">Payment Plan Type</label>
+                      <div className="input-group">
+                        <select
+                          className="form-select"
+                          style={{ backgroundImage: 'none' }}
+                          value={propertyData.paymentPlan}
+                          onChange={(e) => handlePaymentPlanChange(e.target.value)}
+                        >
+                          <option value="clp">CLP (Construction Linked Plan)</option>
+                          <option value="80-20">80%-20% (80% HL, 20% Self)</option>
+                          <option value="25-75">25%-75% (75% HL, 25% Self)</option>
+                          <option value="rtm">Ready to move</option>
+                          <option value="custom">Custom (User Defined)</option>
+                        </select>
+                        <span className="input-group-text bg-white text-secondary border-start-0">
+                          <i className="bi bi-chevron-down"></i>
+                        </span>
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label">Holding Period (Years)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={propertyData.assumptions.investmentPeriod}
+                        onChange={(e) => handleAssumptionChange('investmentPeriod', e.target.value)}
+                      />
+                    </div>
                   </div>
-                  <div className="row g-2">
-                    {userSelections.scenarioExitPrices.map((price, index) => (
-                      <div key={index} className="col-12">
-                        <div className="input-group input-group-sm mb-2">
-                          <span className="input-group-text">Scenario {index + 1}</span>
+
+                  {/* Custom Payment Plan Options */}
+                  {propertyData.paymentPlan === 'custom' && (
+                    <div className="mt-4 p-3 bg-light rounded">
+                      <h6 className="fw-bold mb-3">
+                        <i className="bi bi-sliders me-2"></i>
+                        Custom Payment Plan Configuration
+                      </h6>
+                      <div className="row g-3">
+                        <div className="col-md-3">
+                          <label className="form-label">Down Payment (%)</label>
                           <input
                             type="number"
                             className="form-control"
-                            value={price}
-                            onChange={(e) => handleUpdateExitPriceScenario(index, e.target.value)}
+                            min="0"
+                            max="100"
+                            value={propertyData.assumptions.downPaymentShare}
+                            onChange={(e) => handleAssumptionChange('downPaymentShare', e.target.value)}
                           />
-                          {userSelections.scenarioExitPrices.length > 1 && (
-                            <button
-                              className="btn btn-danger d-flex align-items-center justify-content-center"
-                              type="button"
-                              onClick={() => handleRemoveExitPriceScenario(index)}
-                              title="Remove Scenario"
-                              style={{ width: '40px' }}
-                            >
-                              <i className="bi bi-trash-fill text-white"></i>
-                            </button>
-                          )}
+                          <small className="text-muted">Cash payment (no loan)</small>
+                        </div>
+                        <div className="col-md-3">
+                          <label className="form-label">Home Loan (%)</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            min="0"
+                            max="80"
+                            value={propertyData.assumptions.homeLoanShare}
+                            placeholder="e.g. 80"
+                            onChange={(e) => handleAssumptionChange('homeLoanShare', e.target.value)}
+                          />
+                          <small className="text-muted">Bank Funding (Max 80%)</small>
+                        </div>
+                        <div className="col-md-3">
+                          <label className="form-label">Personal Loan 1 (%)</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            min="0"
+                            max="100"
+                            value={propertyData.assumptions.personalLoan1Share}
+                            onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
+                          />
+                        </div>
+                        <div className="col-md-3">
+                          <label className="form-label">Personal Loan 2 (%)</label>
+                          <input
+                            type="number"
+                            className="form-control"
+                            min="0"
+                            max="100"
+                            value={propertyData.assumptions.personalLoan2Share}
+                            onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
+                          />
                         </div>
                       </div>
-                    ))}
+
+                      {isError && (
+                        <div className="mt-3 alert alert-danger">
+                          <small>
+                            <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>Error:</strong> Your inputs total {userDefinedTotal}%. They cannot exceed 100%.
+                          </small>
+                        </div>
+                      )}
+
+                      {!isError && (
+                        <div className="mt-3 alert alert-info">
+                          <div className="d-flex justify-content-between">
+                            <small><i className="bi bi-check-circle me-2"></i>Total Allocation</small>
+                            <small className="fw-bold">{currentTotal}%</small>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* === STEP 3: LOAN CONFIGURATION === */}
+            {currentStep === 3 && (
+              <div className="animate-fade-in">
+
+                {/* Estimated Possession Timeline */}
+                <div className="mb-4 ps-4 pe-4">
+                  <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+                    <i className="bi bi-calendar-date me-2"></i>
+                    Estimated Possession Timeline
+                  </h5>
+                  <div className="row g-3">
+                    <div className="col-md-6">
+                      <label className="form-label">Estimated Possession After (Months)</label>
+                      <div className="input-group">
+                        <input
+                          type="number"
+                          className="form-control"
+                          value={propertyData.assumptions.possessionMonths}
+                          onChange={(e) => handleAssumptionChange('possessionMonths', e.target.value)}
+                        />
+                        <span className="input-group-text">months</span>
+                      </div>
+                      <small className="text-muted">Time until you get possession of the property</small>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="p-3 bg-light rounded">
+                        <small className="text-muted">Impact on Loans</small>
+                        <div className="fw-bold">
+                          Home Loan EMI: Starts after {propertyData.assumptions.possessionMonths} months
+                        </div>
+                        <small className="text-muted">PL1: Independent • PL2: Starts from possession</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Home Loan Information */}
+                <div className="mb-4 ps-4 pe-4">
+                  <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+                    <i className="bi bi-bank me-2"></i>
+                    Home Loan Details
+                  </h5>
+                  <div className="row g-3">
+                    <div className="col-md-3">
+                      <label className="form-label small">Home Loan Rate</label>
+                      <div className="input-group input-group-sm">
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="form-control"
+                          value={propertyData.assumptions.homeLoanRate}
+                          onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
+                        />
+                        <span className="input-group-text bg-white text-muted">%</span>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">
+                        Start After Possession (Current: {propertyData.assumptions.homeLoanStartMonth} months)
+                        <br />
+                        <small className="text-muted">Selected: {propertyData.assumptions.homeLoanStartMonth} months</small>
+                      </label>
+                      <input
+                        type="range"
+                        className="form-range"
+                        min="0"
+                        max="240"
+                        value={propertyData.assumptions.homeLoanStartMonth}
+                        onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                      />
+                      <div className="d-flex justify-content-between">
+                        <small>Month 0</small>
+                        <small>240 months</small>
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">Loan Term (Years)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={propertyData.assumptions.homeLoanTerm}
+                        onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <div className="p-3 bg-light rounded h-100">
+                        <small className="text-muted">Actual EMI Start</small>
+                        <div className="fw-bold">
+                          Month {parseInt(propertyData.assumptions.possessionMonths || 0) + parseInt(propertyData.assumptions.homeLoanStartMonth || 0) + 1}
+                        </div>
+                        <small className="text-muted">After possession delay</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Personal Loan 1 Information */}
+                <div className="mb-4 ps-4 pe-4">
+                  <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+                    <i className="bi bi-cash-coin me-2"></i>
+                    Personal Loan 1 Details
+                  </h5>
+                  <div className="row g-3">
+                    <div className="col-md-3">
+                      <label className="form-label">Share of Total Cost (%)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={propertyData.assumptions.personalLoan1Share}
+                        onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
+                        disabled={propertyData.paymentPlan !== 'custom'}
+                      />
+                      {propertyData.paymentPlan !== 'custom' && (
+                        <small className="text-muted">Set by payment plan</small>
+                      )}
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">Amount</label>
+                      <div className="form-control bg-light">
+                        {formatCurrency(propertyData.properties[0]?.size * propertyData.purchasePrice * (propertyData.assumptions.personalLoan1Share / 100))}
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">Personal Loan Rate (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        className="form-control"
+                        value={propertyData.assumptions.personalLoan1Rate}
+                        onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
+                      />
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">
+                        Start Month (Current: {propertyData.assumptions.personalLoan1StartMonth})
+                        <br />
+                        <small className="text-muted">Independent of possession</small>
+                      </label>
+                      <input
+                        type="range"
+                        className="form-range"
+                        min="0"
+                        max="84"
+                        value={propertyData.assumptions.personalLoan1StartMonth}
+                        onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
+                      />
+                      <div className="d-flex justify-content-between">
+                        <small>Month 0</small>
+                        <small>84 months</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Personal Loan 2 Information */}
+                <div className="mb-4 ps-4 pe-4">
+                  <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+                    <i className="bi bi-cash-coin me-2"></i>
+                    Personal Loan 2 Details
+                  </h5>
+                  <div className="row g-3">
+                    <div className="col-md-3">
+                      <label className="form-label">Share of Total Cost (%)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={propertyData.assumptions.personalLoan2Share}
+                        onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
+                        disabled={propertyData.paymentPlan !== 'custom'}
+                      />
+                      {propertyData.paymentPlan !== 'custom' && (
+                        <small className="text-muted">Set by payment plan</small>
+                      )}
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">Amount</label>
+                      <div className="form-control bg-light">
+                        {formatCurrency(propertyData.properties[0]?.size * propertyData.purchasePrice * (propertyData.assumptions.personalLoan2Share / 100))}
+                      </div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">Personal Loan Rate (%)</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        className="form-control"
+                        value={propertyData.assumptions.personalLoan2Rate}
+                        onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
+                        disabled={propertyData.assumptions.personalLoan2Share === 0}
+                      />
+                      {propertyData.assumptions.personalLoan2Share === 0 && (
+                        <small className="text-muted">Not applicable (0% share)</small>
+                      )}
+                    </div>
+                    <div className="col-md-3">
+                      <div className="p-3 bg-light rounded h-100">
+                        <small className="text-muted">PL2 Start Month</small>
+                        <div className="fw-bold">
+                          Month {parseInt(propertyData.assumptions.possessionMonths || 0) + 1}
+                        </div>
+                        <small className="text-muted">Starts from possession date</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* CLP Specific Details */}
+                {propertyData.paymentPlan === 'clp' && (
+                  <div className="mb-4 ps-4 pe-4">
+                    <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
+                      <i className="bi bi-building me-2"></i>
+                      CLP Construction Details
+                    </h5>
+                    <div className="row g-3">
+                      <div className="col-md-4">
+                        <label className="form-label">Construction Duration (Years)</label>
+                        <input
+                          type="number"
+                          step="0.5"
+                          className="form-control"
+                          value={propertyData.assumptions.clpDurationYears}
+                          onChange={(e) => handleAssumptionChange('clpDurationYears', e.target.value)}
+                        />
+                        <small className="text-muted">Total construction period</small>
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label">First Bank Disbursement (Month)</label>
+                        <input
+                          type="number"
+                          className="form-control"
+                          value={propertyData.assumptions.bankDisbursementStartMonth}
+                          onChange={(e) => handleAssumptionChange('bankDisbursementStartMonth', e.target.value)}
+                        />
+                        <small className="text-muted">Month when first disbursement occurs</small>
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label">Disbursement Interval (Months)</label>
+                        <input
+                          type="number"
+                          className="form-control"
+                          value={propertyData.assumptions.bankDisbursementInterval}
+                          onChange={(e) => handleAssumptionChange('bankDisbursementInterval', e.target.value)}
+                        />
+                        <small className="text-muted">Months between disbursements</small>
+                      </div>
+                    </div>
+                    <div className="alert alert-info mt-3">
+                      <small>
+                        <i className="bi bi-info-circle me-2"></i>
+                        In CLP plans, Interest During Construction (IDC) is calculated monthly and added to the Home Loan EMI calculation.
+                      </small>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === STEP 4: EXIT SCENARIOS === */}
+            {currentStep === 4 && (
+              <div className="animate-fade-in">
+                {/* NEW HEADER: Title on left, Button on right */}
+                <div className="d-flex justify-content-between align-items-center mb-4 pb-2 ms-4 border-bottom border-secondary border-opacity-25">
+                  <h5 className="fw-bold text-secndary mb-0">
+                    <i className="bi bi-graph-up-arrow me-2"></i>Exit Scenarios
+                  </h5>
+                  <button
+                    className="btn btn-sm btn-outline-primary"
+                    onClick={handleAddExitPriceScenario}
+                  >
+                    <i className="bi bi-plus-lg me-1"></i> Add Scenario
+                  </button>
+                </div>
+
+                <div className="mb-4 ps-4 pe-4">
+                  <div className="row g-3 mb-3">
+                    {/* Left Column: Selected Price */}
+                    <div className="col-md-6">
+                      <label className="form-label">Selected Exit Price (₹/sq.ft)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={userSelections.selectedExitPrice}
+                        onChange={(e) => handleSelectionUpdate('selectedExitPrice', parseFloat(e.target.value))}
+                      />
+                    </div>
+
+                    {/* Right Column: Scenarios List (Button removed from here) */}
+                    <div className="col-md-6">
+                      <label className="form-label">Scenario Exit Prices</label>
+
+                      <div className="row g-2">
+                        {userSelections.scenarioExitPrices.map((price, index) => (
+                          <div key={index} className="col-12">
+                            <div className="input-group input-group-sm mb-2">
+                              <span className="input-group-text">Scenario {index + 1}</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                value={price}
+                                onChange={(e) => handleUpdateExitPriceScenario(index, e.target.value)}
+                              />
+                              {userSelections.scenarioExitPrices.length > 1 && (
+                                <button
+                                  className="btn btn-danger d-flex align-items-center justify-content-center"
+                                  type="button"
+                                  onClick={() => handleRemoveExitPriceScenario(index)}
+                                  title="Remove Scenario"
+                                  style={{ width: '40px' }}
+                                >
+                                  <i className="bi bi-trash-fill text-white"></i>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
+            {renderNavButtons()}
 
-            {/* Action Button */}
-            <div className="text-center mt-5 pt-3">
-              <button
-                className="btn btn-primary btn-lg shadow-lg px-5 py-3"
-                onClick={handleAnalyzeClick}
-              >
-                <i className="bi bi-graph-up-arrow me-2"></i>
-                Analyze Property & View Results
-              </button>
-              <p className="text-muted mt-3 small">
-                Click to generate detailed analysis and financial breakdown
-              </p>
-            </div>
           </div>
         </div>
 
@@ -1474,7 +1574,7 @@ const PropertyComparison = () => {
 
         {/* Header Section */}
         <div className="glass-card mb-5">
-          <div className="card-body p-4">
+          <div className="card-body">
             <div className="row align-items-center">
               <div className="col-md-9">
                 <h2 className="fw-bold mb-2 gradient-text">
@@ -1499,11 +1599,22 @@ const PropertyComparison = () => {
         </div>
 
         {/* 1. Quick Stats Row */}
-        <div className="row g-4 mb-5">
-          {renderMetricCard("Total Property Cost", formatLakhs(breakdown.totalCost), "bi-cash-stack", "primary")}
-          {renderMetricCard("Estimated ROI", formatPercent(breakdown.roi), "bi-percent", "success")}
-          {renderMetricCard("Cash After Sale", formatLakhs(breakdown.leftoverCash), "bi-graph-up-arrow", "warning")}
-          {renderMetricCard("Holding Period", `${breakdown.years}yrs`, "bi-calendar-check", "info")}
+        <div style={{ maxWidth: '1300px', margin: '0 auto' }}>
+          <div className="row g-4 mb-5">
+            {renderMetricCard("Total Cost", formatLakhs(breakdown.totalCost), "bi-cash-stack", "primary")}
+
+            {/* SPECIAL ROI CARD */}
+            <div className="col-6 col-md-3">
+              <div className="metric-card glass-card text-center h-100 p-3 border border-success shadow">
+                <div className="rounded-circle bg-success text-white d-flex align-items-center justify-content-center mx-auto mb-3 shadow-sm" style={{ width: '60px', height: '60px' }}><i className="bi bi-graph-up-arrow fs-3"></i></div>
+                <h4 className="fw-bold mb-1 text-success">{formatPercent(breakdown.roi)}</h4>
+                <p className="text-muted mb-0 small fw-bold">Estimated ROI</p>
+              </div>
+            </div>
+
+            {renderMetricCard("Cash After Sale", formatLakhs(breakdown.leftoverCash), "bi-wallet2", "warning")}
+            {renderMetricCard("Holding Period", `${breakdown.years}yrs`, "bi-hourglass-split", "info")}
+          </div>
         </div>
 
         {/* 2. STAGE WISE BREAKDOWN (Moved Here) */}
@@ -1598,7 +1709,7 @@ const PropertyComparison = () => {
         {renderProfitChart(calculatedData.profits)}
 
         {/* 4. Comparison Table (Corrected with Array Index) */}
-        <div className="glass-card mb-5 ps-3 pt-3 pe-3">
+        <div className="glass-card mb-5 p-4">
           <div className="card-header">
             <h5 className="mb-0 pb-2 border-bottom border-secondary border-opacity-25">
               <i className="bi bi-table me-2"></i>
@@ -1707,9 +1818,11 @@ const PropertyComparison = () => {
         {renderKeyInsights(breakdown)}
 
         {/* 7. Action Buttons */}
-        <div className="row g-3 mb-5">
-          {renderActionBtn("Detailed Breakdown", "View all financial calculations", "bi-calculator", "breakdown", "btn-primary")}
-          {renderActionBtn("Edit Parameters", "Modify inputs", "bi-pencil-square", "inputs", "btn-outline-light")}
+        <div style={{ maxWidth: '1300px', margin: '0 auto' }}>
+          <div className="row g-3 mb-5">
+            {renderActionBtn("Detailed Breakdown", "View all financial calculations", "bi-calculator", "breakdown", "btn-primary")}
+            {renderActionBtn("Edit Parameters", "Modify inputs", "bi-pencil-square", "inputs", "btn-outline-light")}
+          </div>
         </div>
       </div>
     );
@@ -1789,14 +1902,14 @@ const PropertyComparison = () => {
     return (
       <div className="mb-5">
         <div className="glass-card mb-4">
-          <div className="card-body p-4 border-bottom">
+          <div className="card-body border-bottom">
             <div className="row align-items-center">
               <div className="col-md-8">
                 <h2 className="fw-bold mb-2 gradient-text">
                   <i className="bi bi-calculator me-3"></i>
                   Detailed Financial Breakdown
                 </h2>
-                <p className="text-muted mb-0">
+                <p className="text-muted mb-0 pb-4">
                   Complete calculation details and amortization schedules
                 </p>
               </div>
@@ -1857,7 +1970,7 @@ const PropertyComparison = () => {
                     "bi-calendar-check",
                     "success", // Color Theme
                     formatCurrency(breakdown.postPossessionEMI),
-                    `Month ${breakdown.possessionMonths} to Month ${breakdown.totalHoldingMonths}`,
+                    `Month ${breakdown.possessionMonths + 1} to Month ${breakdown.totalHoldingMonths}`,
                     `${breakdown.postPossessionMonths} months`,
                     // Component Inner JSX
                     <>
@@ -2212,10 +2325,13 @@ const PropertyComparison = () => {
   return (
     <div className="property-comparison">
       <div className="position-fixed top-0 left-0 w-100 h-100" style={{ zIndex: -1 }}>
+        {/* Left Blob - Increased opacity to 0.15 */}
         <div className="position-absolute top-0 start-0 w-100 h-100"
-          style={{ background: 'radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.08) 0%, transparent 50%)' }}></div>
+          style={{ background: 'radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.15) 0%, transparent 50%)' }}></div>
+
+        {/* Right Blob - Increased opacity to 0.15 */}
         <div className="position-absolute top-0 end-0 w-100 h-100"
-          style={{ background: 'radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.08) 0%, transparent 50%)' }}></div>
+          style={{ background: 'radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%)' }}></div>
       </div>
 
       <div className="container-fluid py-4">
