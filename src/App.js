@@ -277,13 +277,6 @@ function App() {
                             </div>
                           )}
                         </div>
-                        
-                        <div className={`p-2 rounded mb-3 small ${theme === 'dark' ? 'bg-secondary bg-opacity-25' : 'bg-light'}`}>
-                          <div className={`d-flex justify-content-between ${theme === 'dark' ? 'text-light' : 'text-secondary'}`}>
-                            <span>User ID:</span>
-                            <span className="font-monospace">{user.uid.substring(0, 8)}...</span>
-                          </div>
-                        </div>
 
                         <hr className={`dropdown-divider my-2 ${theme === 'dark' ? 'border-secondary' : ''}`} />
                         
