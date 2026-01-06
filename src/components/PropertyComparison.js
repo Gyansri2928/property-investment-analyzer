@@ -782,7 +782,7 @@ const PropertyComparison = () => {
                     isCompleted ? 'bg-success text-white' : 'bg-white text-muted border'
                     }`}
                   style={{
-                    width: '${((currentStep - 1) / (steps.length - 1)) * 100}%',
+                    width: '40px',
                     height: '40px',
                     transition: 'all 0.3s ease',
                     boxShadow: isActive ? '0 0 0 4px rgba(13, 110, 253, 0.2)' : 'none'
