@@ -378,3 +378,227 @@
         text-shadow: .25em 0 0 #667eea, .5em 0 0 #667eea;
     }
 }
+
+/* =========================================
+   9. DARK MODE COMPONENT OVERRIDES
+   ========================================= */
+
+/* Force 'bg-white' and 'bg-light' to be dark & transparent in Dark Mode */
+[data-theme='dark'] .bg-white,
+[data-theme='dark'] .bg-light {
+    background-color: rgba(255, 255, 255, 0.05) !important;
+    /* Dark semi-transparent */
+    border-color: rgba(255, 255, 255, 0.1) !important;
+    color: var(--text-primary) !important;
+}
+
+/* Fix the small "muted" labels (like 'PL1 EMI') inside those boxes */
+[data-theme='dark'] .bg-white .text-muted,
+[data-theme='dark'] .bg-light .text-muted {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+/* Optional: Make the card headers slightly transparent in dark mode too */
+[data-theme='dark'] .card-header {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* =========================================
+   10. PRINT / PDF REPORT STYLING
+   ========================================= */
+@media print {
+
+    /* 1. Hide interactive elements */
+    .no-print,
+    .btn,
+    .nav,
+    .stepper,
+    input[type=range],
+    button {
+        display: none !important;
+    }
+
+    /* 2. Reset Backgrounds for Ink Saving */
+    body,
+    .property-comparison {
+        background: white !important;
+        color: black !important;
+        height: auto !important;
+        overflow: visible !important;
+    }
+
+    /* 3. flatten glass cards to simple borders */
+    .glass-card,
+    .metric-card,
+    .card {
+        background: white !important;
+        box-shadow: none !important;
+        border: 1px solid #ddd !important;
+        backdrop-filter: none !important;
+        margin-bottom: 20px !important;
+        break-inside: avoid;
+        /* Prevent cutting cards in half */
+    }
+
+    /* 4. Fix Grid Layouts for Print (A4 Width) */
+    .col-md-3,
+    .col-md-6,
+    .col-md-4 {
+        float: left;
+    }
+
+    .col-md-3 {
+        width: 25% !important;
+    }
+
+    .col-md-4 {
+        width: 33.3% !important;
+    }
+
+    .col-md-6 {
+        width: 50% !important;
+    }
+
+    /* 5. Typography Tweaks */
+    .gradient-text {
+        background: none !important;
+        -webkit-text-fill-color: black !important;
+        color: black !important;
+    }
+
+    /* 6. Chart Bars */
+    .bg-primary {
+        background-color: #0d6efd !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .bg-success {
+        background-color: #198754 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .bg-warning {
+        background-color: #ffc107 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .bg-danger {
+        background-color: #dc3545 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+/* =========================================
+   11. IDC POPUP STYLES (CLICK VERSION)
+   ========================================= */
+
+.idc-breakdown-popup {
+    /* Position */
+    position: absolute;
+    bottom: 115%; /* Pushes it UP above the button */
+    left: 50%;
+    transform: translateX(-50%);
+    
+    /* Size & Shape */
+    width: 320px;
+    max-width: 85vw; /* Mobile friendly */
+    background: #1e1e24;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 12px;
+    
+    /* Visuals */
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    z-index: 1000;
+    overflow: hidden;
+    
+    /* Animation */
+    animation: popUp 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Triangle Pointer pointing DOWN to the button */
+.idc-breakdown-popup::after {
+    content: "";
+    position: absolute;
+    top: 100%; /* At the bottom of the popup */
+    left: 50%;
+    margin-left: -8px;
+    border-width: 8px;
+    border-style: solid;
+    border-color: #1e1e24 transparent transparent transparent;
+}
+
+@keyframes popUp {
+    from { opacity: 0; transform: translate(-50%, 10px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Popup Header */
+.popup-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 10px 15px;
+    color: white;
+    font-weight: 600;
+    font-size: 0.85rem;
+}
+
+/* Scroll Area */
+.idc-scroll-box {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+/* Table Styles */
+.idc-mini-table {
+    width: 100%;
+    font-size: 0.8rem;
+    color: #ddd;
+    border-collapse: collapse;
+}
+
+.idc-mini-table th { 
+    position: sticky; 
+    top: 0; 
+    background: #2b2b35; 
+    padding: 8px; 
+    font-size: 0.75rem;
+    color: #aaa;
+    text-transform: uppercase;
+}
+
+.idc-mini-table td { 
+    padding: 8px; 
+    border-bottom: 1px solid rgba(255,255,255,0.05); 
+}
+/* =========================================
+   HOVER EXPAND BUTTON (Icon -> Text)
+   ========================================= */
+.hover-expand-btn {
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    min-width: 60px; /* Size of the circle/icon only */
+    border-radius: 50px;
+}
+
+/* Default State: Text is hidden */
+.hover-expand-btn .expandable-text {
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    white-space: nowrap; /* Prevents text from wrapping while expanding */
+    transition: all 0.4s ease;
+}
+
+/* Hover State: Reveal Text */
+.hover-expand-btn:hover {
+    padding-left: 25px;
+    padding-right: 35px; /* Add space on the right */
+}
+
+.hover-expand-btn:hover .expandable-text {
+    max-width: 300px; /* Arbitrary large number to allow content to fit */
+    opacity: 1;
+    margin-left: 15px; /* Push text away from icon */
+}

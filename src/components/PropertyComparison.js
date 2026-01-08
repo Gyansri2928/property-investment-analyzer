@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import * as XLSX from 'xlsx';
+import { useNavigate, useLocation } from 'react-router-dom'; // Add this import
 import './PropertyComparison.css';
 
 // ===================== CONSTANTS =====================
@@ -91,10 +93,9 @@ const calculateTotalInterestPaid = (principal, annualRate, years, paymentsMade) 
   return interestPaid;
 };
 
-const calculateMonthlyIDCEMI = (homeLoanAmount, annualRate, constructionMonths) => {
-  if (!homeLoanAmount || homeLoanAmount === 0 || constructionMonths <= 0) return 0;
-  const monthlyRate = annualRate / (12 * 100);
-  return homeLoanAmount * monthlyRate;
+const calculateMonthlyIDCEMI = (totalIDCAmount, constructionMonths) => {
+  if (!totalIDCAmount || totalIDCAmount === 0 || constructionMonths <= 0) return 0;
+  return totalIDCAmount / constructionMonths; // Returns Average
 };
 
 // ===================== 2. UI TEMPLATES (Stateless) =====================
@@ -129,7 +130,7 @@ const getSafeValue = (value) => {
   if (value === '' || value === null || isNaN(value)) return 0;
   return parseFloat(value);
 };
-const renderTimelineCard = (title, icon, color, mainEMI, period, duration, componentsJSX, totalAmount, calcText, extraHeader = null, extraFooter = null) => (
+const renderTimelineCard = (title, icon, color, mainEMI, period, duration, componentsJSX, totalAmount, calcText, footerSubtitle, extraHeader = null, extraFooter = null) => (
   <div className="col-md-6">
     <div className={`card h-100 border-${color}`}>
       <div className={`card-header bg-${color} text-white`}>
@@ -138,8 +139,11 @@ const renderTimelineCard = (title, icon, color, mainEMI, period, duration, compo
       </div>
       <div className="card-body">
         <div className="text-center mb-3 ps-2 pe-2">
-          <h3 className={`text-${color} fw-bold`}>{mainEMI}/month</h3>
-          <small className="text-muted">Monthly EMI {title.includes("Pre") ? "during construction" : "after possession"}</small>
+          {/* 1. We removed "/month" - now it just prints what you pass */}
+          <h3 className={`text-${color} fw-bold`}>{mainEMI}</h3>
+
+          {/* 2. We removed the hardcoded logic - now it prints the subtitle argument */}
+          <small className="text-muted">{footerSubtitle}</small>
         </div>
         <div className="row g-2">
           <div className="col-6">
@@ -277,9 +281,39 @@ const renderKeyInsights = (breakdown) => {
 const PropertyComparison = () => {
   // --- STATE ---
 
-  const [activeTab, setActiveTab] = useState('inputs');
+  const location = useLocation();
+
+  // ... existing state definitions ...
+  const [activeTab, setActiveTab] = useState(location.state?.returnTab || 'inputs');
+  const navigate = useNavigate();
+
+  // ⬇️ ADD THIS USEEFFECT ⬇️
+  // This clears the "redirect" instruction from the browser history
+  // so that if you refresh later, it doesn't force you back to 'breakdown'.
+  useEffect(() => {
+    if (location.state?.returnTab) {
+      // Replace the current history entry with a clean state
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
+  // ⬆️ END ADDITION ⬆️
+
+  // ... rest of your code ...
   // New State for Wizard Steps
-  const [currentStep, setCurrentStep] = useState(1);
+  // 3. Wizard Step State (Smart Initialization)
+  const [currentStep, setCurrentStep] = useState(() => {
+    // Check if we have saved data in LocalStorage
+    const savedData = localStorage.getItem('propertyCalc_data');
+    if (savedData) {
+      const parsed = JSON.parse(savedData);
+      // Logic: If "Purchase Price" exists, assume user has entered data -> Start at Step 4
+      if (parsed.purchasePrice && parsed.purchasePrice > 0) {
+        return 4;
+      }
+    }
+    // Else start at Step 1
+    return 1;
+  });
   const [showDataEnteredAlert, setShowDataEnteredAlert] = useState(false);
 
   // 1. Input Data State (Load from Local Storage OR use Default)
@@ -304,6 +338,95 @@ const PropertyComparison = () => {
       return INITIAL_USER_SELECTIONS;
     }
   });
+
+  // --- EXPORT FUNCTIONALITY ---
+
+  const handlePrintReport = () => {
+    window.print();
+  };
+
+  const handleExportExcel = () => {
+    if (!calculatedData.detailedBreakdown) return;
+    const bd = calculatedData.detailedBreakdown;
+    const inputs = propertyData;
+    const sel = userSelections;
+    const propName = inputs.properties.find(p => p.id === sel.selectedPropertyId)?.name || "Property";
+
+    // --- SHEET 1: DETAILED INVESTMENT SUMMARY ---
+    const summaryData = [
+      ["PROPERTY INVESTMENT ANALYSIS REPORT"],
+      ["Generated Date:", new Date().toLocaleDateString()],
+      [],
+      ["1. PROPERTY & COST DETAILS"],
+      ["Property Name", propName],
+      ["Location", inputs.properties.find(p => p.id === sel.selectedPropertyId)?.location || "-"],
+      ["Size", `${bd.propertySize} sq.ft`],
+      ["Purchase Price", `${formatCurrency(inputs.purchasePrice)}/sq.ft`],
+      ["Stamp Duty", `${inputs.stampDuty}%`],
+      ["Other Charges", formatCurrency(inputs.otherCharges)],
+      ["TOTAL PROPERTY COST", formatCurrency(bd.totalCost)],
+      [],
+      ["2. FUNDING PLAN (How you pay)"],
+      ["Payment Plan", inputs.paymentPlan.toUpperCase()],
+      ["Down Payment (Self)", `${bd.downPaymentShare}%`, formatCurrency(bd.downPaymentAmount)],
+      ["Home Loan", `${bd.homeLoanShare}%`, formatCurrency(bd.homeLoanAmount), `@ ${inputs.assumptions.homeLoanRate}% for ${inputs.assumptions.homeLoanTerm} yrs`],
+      ["Personal Loan 1", `${bd.personalLoan1Share}%`, formatCurrency(bd.personalLoan1Amount), `@ ${inputs.assumptions.personalLoan1Rate}% for ${inputs.assumptions.personalLoan1Term} yrs`],
+      ["Personal Loan 2", `${bd.personalLoan2Share}%`, formatCurrency(bd.personalLoan2Amount), `@ ${inputs.assumptions.personalLoan2Rate}% for ${inputs.assumptions.personalLoan2Term} yrs`],
+      ["TOTAL CASH INVESTED (Upfront)", formatCurrency(bd.totalCashInvested)],
+      [],
+      ["3. MONTHLY CASH FLOW (EMIs)"],
+      ["Home Loan EMI", formatCurrency(bd.homeLoanEMI)],
+      ["Personal Loan 1 EMI", formatCurrency(bd.personalLoan1EMI)],
+      ["Personal Loan 2 EMI", formatCurrency(bd.personalLoan2EMI)],
+      ["Avg. IDC (During Construction)", formatCurrency(bd.monthlyIDCEMI)],
+      ["Max Monthly Commitment", formatCurrency(bd.homeLoanEMI + bd.personalLoan1EMI + bd.personalLoan2EMI)],
+      [],
+      ["4. RETURN ANALYSIS (After " + sel.selectedYears + " Years)"],
+      ["Exit Price", `${formatCurrency(sel.selectedExitPrice)}/sq.ft`],
+      ["Sale Value", formatCurrency(bd.saleValue)],
+      ["(-) Outstanding Loan Balance", formatCurrency(bd.totalLoanOutstanding)],
+      ["(-) Total EMIs Paid", formatCurrency(bd.totalEMIPaid)],
+      ["(-) Initial Cash Down Payment", formatCurrency(bd.downPaymentAmount)],
+      ["NET PROFIT / LOSS", formatCurrency(bd.netGainLoss)],
+      ["ROI %", formatPercent(bd.roi)]
+    ];
+
+    // --- SHEET 2: TIMELINE PHASES ---
+    const timelineData = [
+      ["PHASE", "PERIOD", "DURATION", "TOTAL MONTHLY PAY", "BREAKDOWN OF PAYMENTS"],
+      [
+        "Timeline 1 (Pre-Possession)",
+        `Month 0 - ${bd.possessionMonths}`,
+        `${bd.prePossessionMonths} Months`,
+        formatCurrency(bd.prePossessionEMI),
+        `PL1 EMI (${formatCurrency(bd.personalLoan1EMI)}) + IDC Interest (${formatCurrency(bd.monthlyIDCEMI)})`
+      ],
+      [
+        "Timeline 2 (Post-Possession)",
+        `Month ${bd.possessionMonths + 1} - ${bd.totalHoldingMonths}`,
+        `${bd.postPossessionMonths} Months`,
+        formatCurrency(bd.postPossessionEMI),
+        `HL EMI (${formatCurrency(bd.homeLoanEMI)}) + PL1 EMI (${formatCurrency(bd.personalLoan1EMI)}) + PL2 EMI (${formatCurrency(bd.personalLoan2EMI)})`
+      ]
+    ];
+
+    // Create Workbook
+    const wb = XLSX.utils.book_new();
+    const wsSummary = XLSX.utils.aoa_to_sheet(summaryData);
+    const wsTimeline = XLSX.utils.aoa_to_sheet(timelineData);
+
+    // Set Column Widths for better visibility
+    const wscols = [{ wch: 30 }, { wch: 20 }, { wch: 20 }, { wch: 30 }];
+    wsSummary['!cols'] = wscols;
+    wsTimeline['!cols'] = [{ wch: 25 }, { wch: 20 }, { wch: 15 }, { wch: 20 }, { wch: 50 }];
+
+    // Append Sheets
+    XLSX.utils.book_append_sheet(wb, wsSummary, "Detailed Summary");
+    XLSX.utils.book_append_sheet(wb, wsTimeline, "Timeline Breakdown");
+
+    // Download
+    XLSX.writeFile(wb, "Property_Investment_Detailed_Report.xlsx");
+  };
 
   // --- PERSISTENCE EFFECTS ---
 
@@ -341,7 +464,8 @@ const PropertyComparison = () => {
       // 2. Calculate Costs
       const baseCost = propertySize * getSafeValue(purchasePrice);
       const extraCharges = getSafeValue(otherCharges); // Lumpsum
-      const stampDutyCost = baseCost * (getSafeValue(stampDuty) / 100); // Percentage Calculation
+      const agreementValue = baseCost + extraCharges;
+      const stampDutyCost = agreementValue * (getSafeValue(stampDuty) / 100);
 
       // 3. Sum it up
       const totalCost = baseCost + extraCharges + stampDutyCost;
@@ -375,22 +499,56 @@ const PropertyComparison = () => {
       const totalCashInvested = downPaymentAmount + personalLoan1Amount + personalLoan2Amount;
 
       // IDC Logic
+      const constructionMonths = assumptions.clpDurationYears * 12;
       let totalIDC = 0;
       let monthlyIDCEMI = 0;
+      let idcSchedule = [];
+
       if (paymentPlan === 'clp' && homeLoanAmount > 0) {
-        const constructionEndMonth = assumptions.clpDurationYears * 12;
-        const slabAmount = totalCost * 0.10;
-        for (let i = 0; i < 8; i++) {
+        const interval = getSafeValue(assumptions.bankDisbursementInterval) || 3;
+
+        // 2. YOUR FORMULA: Calculate Number of Slabs based on Possession Time
+        // Formula: Possession Months / Interval
+        // We use Math.floor to get whole slabs, and Math.max(1, ...) to ensure at least 1 slab exists.
+        const calculatedSlabs = Math.floor(assumptions.possessionMonths / interval);
+        const numberOfSlabs = Math.max(1, calculatedSlabs);
+        const slabAmount = homeLoanAmount / numberOfSlabs;
+
+
+        for (let i = 0; i < numberOfSlabs; i++) {
           const month = assumptions.bankDisbursementStartMonth + (i * assumptions.bankDisbursementInterval);
-          if (month <= constructionEndMonth) {
-            const monthsTillEnd = constructionEndMonth - month;
-            if (monthsTillEnd > 0) totalIDC += slabAmount * (assumptions.homeLoanRate / 100) * (monthsTillEnd / 12);
+
+          if (month <= constructionMonths) {
+            const monthsTillEnd = constructionMonths - month;
+            if (monthsTillEnd > 0) {
+              // 1. Interest for a SINGLE slab
+              const singleSlabMonthlyInterest = slabAmount * (assumptions.homeLoanRate / 100) / 12;
+
+              // 2. Cumulative Interest (What you actually pay that month)
+              // If it's Slab 3 (index 2), you pay for 3 slabs.
+              const currentTotalMonthlyEMI = singleSlabMonthlyInterest * (i + 1);
+
+              // 3. Lifetime Cost of this specific slab
+              const totalInterestForSlab = singleSlabMonthlyInterest * monthsTillEnd;
+
+              totalIDC += totalInterestForSlab;
+
+              // Add to Schedule (for the hover table)
+              idcSchedule.push({
+                slabNo: i + 1,                    // Col 1: Slab #
+                releaseMonth: month,              // Col 2: Release Month
+                timeRemaining: monthsTillEnd,     // Col 3: Time Remaining
+                currentTotalMonthlyEMI: currentTotalMonthlyEMI,
+                interestCost: totalInterestForSlab // Col 4: Interest Cost (Total for this slab)
+              });
+            }
           }
         }
-        monthlyIDCEMI = calculateMonthlyIDCEMI(homeLoanAmount, assumptions.homeLoanRate, constructionEndMonth);
+        // Calculate Average
+        monthlyIDCEMI = calculateMonthlyIDCEMI(totalIDC, constructionMonths);
       }
 
-      const totalHomeLoanAtCompletion = homeLoanAmount + totalIDC;
+      const totalHomeLoanAtCompletion = homeLoanAmount;
 
       // EMI & Outstanding Logic (Using external math helpers)
       const homeLoanEMI = homeLoanAmount > 0 ? calculateEMI(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm) : 0;
@@ -401,8 +559,7 @@ const PropertyComparison = () => {
       // FIX: Add the delay to the possession month (Possession + Delay)
       const homeLoanPaymentsMade = Math.max(0, totalHoldingMonths - (assumptions.possessionMonths + assumptions.homeLoanStartMonth));
       const pl1PaymentsMade = Math.max(0, totalHoldingMonths - assumptions.personalLoan1StartMonth);
-      const pl2PaymentsMade = Math.max(0, totalHoldingMonths - assumptions.possessionMonths);
-
+      const pl2PaymentsMade = Math.max(0, totalHoldingMonths - (assumptions.possessionMonths + assumptions.personalLoan2StartMonth));
       const homeLoanOutstanding = homeLoanAmount > 0 ? calculateOutstandingAfterPayments(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm, homeLoanPaymentsMade) : 0;
       const personalLoan1Outstanding = personalLoan1Amount > 0 ? calculateOutstandingAfterPayments(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term, pl1PaymentsMade) : 0;
       const personalLoan2Outstanding = personalLoan2Amount > 0 ? calculateOutstandingAfterPayments(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term, pl2PaymentsMade) : 0;
@@ -413,8 +570,9 @@ const PropertyComparison = () => {
 
       const totalLoanOutstanding = homeLoanOutstanding + personalLoan1Outstanding + personalLoan2Outstanding;
       const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + totalIDC;
-      const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade);
 
+      // Actual Total Paid based on start dates
+      const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC; // Added totalIDC here for accuracy
       const saleValue = propertySize * exitPrice;
       const leftoverCash = saleValue - totalLoanOutstanding;
       // --- FIX STARTS HERE ---
@@ -443,7 +601,7 @@ const PropertyComparison = () => {
       const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
 
       return {
-        propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
+        idcSchedule, propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
         homeLoanEMI, personalLoan1EMI, personalLoan2EMI,
         homeLoanAmount, personalLoan1Amount, personalLoan2Amount, downPaymentAmount,
         totalHomeLoanAtCompletion, homeLoanOutstanding, personalLoan1Outstanding, personalLoan2Outstanding,
@@ -1253,12 +1411,23 @@ const PropertyComparison = () => {
                       )}
                     </div>
                     <div className="col-md-3">
-                      <div className="p-3 bg-light rounded h-100">
-                        <small className="text-muted">PL2 Start Month</small>
-                        <div className="fw-bold">
-                          Month {parseInt(propertyData.assumptions.possessionMonths || 0) + 1}
-                        </div>
-                        <small className="text-muted">Starts from possession date</small>
+                      <label className="form-label">
+                        Start After Possession
+                        <br />
+                        <small className="text-muted">Delay: {propertyData.assumptions.personalLoan2StartMonth} months</small>
+                      </label>
+                      <input
+                        type="range"
+                        className="form-range"
+                        min="0"
+                        max="36"
+                        value={propertyData.assumptions.personalLoan2StartMonth}
+                        onChange={(e) => handleAssumptionChange('personalLoan2StartMonth', e.target.value)}
+                        disabled={propertyData.assumptions.personalLoan2Share === 0}
+                      />
+                      <div className="d-flex justify-content-between">
+                        <small>+0 mo</small>
+                        <small>+36 mo</small>
                       </div>
                     </div>
                   </div>
@@ -1576,7 +1745,9 @@ const PropertyComparison = () => {
         <div className="glass-card mb-5">
           <div className="card-body">
             <div className="row align-items-center">
-              <div className="col-md-9">
+
+              {/* Left Side: Title (Changed to col-md-8 to make room) */}
+              <div className="col-md-8">
                 <h2 className="fw-bold mb-2 gradient-text">
                   <i className="bi bi-speedometer2 me-3"></i>
                   Investment Analysis Overview
@@ -1585,15 +1756,53 @@ const PropertyComparison = () => {
                   Quick summary and stage-wise breakdown of your investment
                 </p>
               </div>
-              <div className="col-md-3 text-end">
-                <button
-                  className="btn btn-outline-primary rounded-pill px-4"
-                  onClick={() => setActiveTab('inputs')}
-                >
-                  <i className="bi bi-pencil-square me-2"></i>
-                  Edit Inputs
-                </button>
+
+              {/* Right Side: Action Buttons (Animated) */}
+              <div className="col-md-4 text-end no-print">
+                <div className="d-flex gap-2 justify-content-end">
+
+                  {/* 1. Excel Button */}
+                  <button
+                    className="btn btn-success d-flex align-items-center justify-content-center hover-expand-btn shadow-sm"
+                    onClick={handleExportExcel}
+                    title="Export to Excel"
+                  >
+                    {/* Icon is outside */}
+                    <i className="bi bi-file-earmark-spreadsheet fs-5"></i>
+
+                    {/* Text is inside expandable wrapper */}
+                    <div className="expandable-text">
+                      <span className="ms-2 fw-bold">Excel</span>
+                    </div>
+                  </button>
+
+                  {/* 2. Print/PDF Button */}
+                  <button
+                    className="btn btn-secondary d-flex align-items-center justify-content-center hover-expand-btn shadow-sm"
+                    onClick={handlePrintReport}
+                    title="Save as PDF"
+                  >
+                    <i className="bi bi-printer fs-5"></i>
+                    <div className="expandable-text">
+                      <span className="ms-2 fw-bold">Report</span>
+                    </div>
+                  </button>
+
+                  {/* 3. Edit Button */}
+                  <button
+                    className="btn btn-outline-primary d-flex align-items-center justify-content-center hover-expand-btn shadow-sm"
+                    onClick={() => setActiveTab('inputs')}
+                    title="Edit Inputs"
+                  >
+                    <i className="bi bi-pencil-square fs-5"></i>
+                    <div className="expandable-text">
+                      <span className="ms-2 fw-bold">Edit</span>
+                    </div>
+                  </button>
+
+                </div>
               </div>
+
             </div>
           </div>
         </div>
@@ -1935,33 +2144,68 @@ const PropertyComparison = () => {
                 </h5>
                 <div className="row g-4 pt-2 ms-2 me-2">
 
-                  {/* Timeline 1: Pre-Possession */}
+                  {/* Timeline 1: Pre-Possession (Total Cost View + Hover Table) */}
                   {renderTimelineCard(
-                    "Timeline 1: Pre-Possession",
-                    "bi-calendar-week",
-                    "primary", // Color Theme
-                    formatCurrency(breakdown.prePossessionEMI),
+                    "Timeline 1: Pre-Possession",    // 1. Title
+                    "bi-calendar-week",              // 2. Icon
+                    "primary",                       // 3. Color
+
+                    // 4. MAIN VALUE (The Big Number)
+                    formatCurrency(breakdown.prePossessionTotal),
+
+                    // 5. Period & 6. Duration
                     `Month 0 to Month ${breakdown.possessionMonths}`,
                     `${breakdown.prePossessionMonths} months`,
-                    // Component Inner JSX
+
+                    // 7. COMPONENT BOXES (With the Popup Logic)
                     <>
                       {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 6)}
-                      {breakdown.hasIDC && breakdown.monthlyIDCEMI > 0 &&
-                        renderComponentBox("Monthly IDC EMI", formatCurrency(breakdown.monthlyIDCEMI), 6, "bg-warning bg-opacity-10", "text-warning")
-                      }
+
+                      {breakdown.hasIDC && (
+                        <div className="col-6 mb-2">
+                          {/* NAVIGATION BUTTON */}
+                          <div
+                            className="p-2 rounded border text-center h-100 bg-warning bg-opacity-10 text-warning property-card-hover"
+                            style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
+
+                            // --- ON CLICK: NAVIGATE TO NEW PAGE ---
+                            onClick={() => navigate('/schedule', {
+                              state: {
+                                idcSchedule: breakdown.idcSchedule,
+                                pl1EMI: breakdown.personalLoan1EMI,
+                                totalIDC: breakdown.totalIDC,
+                                propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
+                                possessionMonths: breakdown.possessionMonths, // To filter rows
+                                totalPaid: breakdown.prePossessionTotal
+                              }
+                            })}
+                          >
+                            <small className="d-block text-muted opacity-75" style={{ fontSize: '0.7rem' }}>Avg IDC / Month</small>
+                            <div className="fw-bold">{formatCurrency(breakdown.monthlyIDCEMI)}</div>
+
+                            <div className="badge bg-warning text-dark mt-1" style={{ fontSize: '0.6rem' }}>
+                              <i className="bi bi-box-arrow-up-right me-1"></i>
+                              Open Full Schedule
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </>,
+
+                    // 8. FOOTER TITLE
                     formatCurrency(breakdown.prePossessionTotal),
-                    `(${breakdown.prePossessionMonths} months × ${formatCurrency(breakdown.prePossessionEMI)})`,
-                    // Extra Header Content
-                    breakdown.hasIDC && <small className="opacity-75">Includes Monthly IDC EMI during construction</small>,
-                    // Extra Footer Content
-                    breakdown.hasIDC && (
-                      <div className="mt-2">
-                        <small className="text-white opacity-75">
-                          Includes {formatCurrency(breakdown.totalIDC)} total IDC over {breakdown.constructionMonths} months
-                        </small>
-                      </div>
-                    )
+
+                    // 9. FOOTER SUBTEXT (Calc Text)
+                    `Includes ~${formatCurrency(breakdown.totalIDC)} in construction interest`,
+
+                    // 10. SUBTITLE (Under Big Number)
+                    "Total amount paid during construction",
+
+                    // 11. EXTRA HEADER (Null)
+                    null,
+
+                    // 12. EXTRA FOOTER (The hint text)
+                    breakdown.hasIDC && <small className="opacity-75 mt-2 d-block">Click 'View Schedule' to see monthly breakdown</small>
                   )}
 
                   {/* Timeline 2: Post-Possession */}
@@ -1969,7 +2213,7 @@ const PropertyComparison = () => {
                     "Timeline 2: Post-Possession",
                     "bi-calendar-check",
                     "success", // Color Theme
-                    formatCurrency(breakdown.postPossessionEMI),
+                    `${formatCurrency(breakdown.postPossessionEMI)}/month`,
                     `Month ${breakdown.possessionMonths + 1} to Month ${breakdown.totalHoldingMonths}`,
                     `${breakdown.postPossessionMonths} months`,
                     // Component Inner JSX
