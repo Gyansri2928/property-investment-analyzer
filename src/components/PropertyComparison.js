@@ -1193,14 +1193,32 @@ const PropertyComparison = () => {
     return (
       <div className="mb-5 ">
         <div className="glass-card mb-4 ps-4 mt-4 pt-4">
-          <div>
-            <h2 className="fw-bold mb-2 gradient-text ps-4 pt-2">
-              <i className="bi bi-input-cursor me-3"></i>
-              Input Parameters
-            </h2>
-            <p className="text-muted mb-0 ps-4">
-              Define your property details, payment plans, and loan assumptions
-            </p>
+          <div className="d-flex justify-content-between align-items-center pe-4">
+            <div>
+              <h2 className="fw-bold mb-2 gradient-text ps-4 pt-2">
+                <i className="bi bi-input-cursor me-3"></i>
+                Input Parameters
+              </h2>
+              <p className="text-muted mb-0 ps-4">
+                Define your property details, payment plans, and loan assumptions
+              </p>
+            </div>
+
+            {/* ✅ NEW GREEN RESET BUTTON */}
+            <button
+              className="btn btn-outline-success d-flex align-items-center shadow-sm"
+              onClick={handleResetData}
+              title="Reset all fields to default values"
+              style={{ 
+                borderRadius: '50px', 
+                padding: '8px 20px', 
+                borderWidth: '2px',
+                fontWeight: '600'
+              }}
+            >
+              <i className="bi bi-arrow-counterclockwise me-2"></i>
+              Reset All Inputs
+            </button>
           </div>
           {/* Stepper Header */}
           <div className="px-lg-5 mt-5">
