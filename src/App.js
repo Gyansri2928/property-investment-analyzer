@@ -212,13 +212,13 @@ function App() {
               {/* User Info - Avatar Dropdown */}
               {user && (
                 <div className="position-relative">
-                  <button 
-                    className="btn p-0 border-0 bg-transparent" 
+                  <button
+                    className="btn p-0 border-0 bg-transparent"
                     onClick={() => setShowUserMenu(!showUserMenu)}
                     style={{ transition: 'transform 0.2s', outline: 'none' }}
                     title="User Profile"
                   >
-                    <div 
+                    <div
                       className="d-flex align-items-center justify-content-center rounded-circle"
                       style={{
                         width: '45px',
@@ -228,7 +228,7 @@ function App() {
                         boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
                       }}
                     >
-                      <div 
+                      <div
                         className="rounded-circle overflow-hidden bg-light d-flex align-items-center justify-content-center"
                         style={{ width: '100%', height: '100%' }}
                       >
@@ -241,22 +241,37 @@ function App() {
                   {showUserMenu && (
                     <>
                       {/* Transparent backdrop to close menu on outside click */}
-                      <div 
+                      <div
                         style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
                         onClick={() => setShowUserMenu(false)}
                       />
-                      
-                      {/* Dropdown Content */}
-                      <div 
-                        className={`dropdown-menu show position-absolute end-0 mt-2 shadow rounded-3 p-3 ${theme === 'dark' ? 'bg-dark border-secondary' : 'bg-white'}`}
-                        style={{ width: '280px', zIndex: 999 }}
+
+                      {/* Dropdown Content - FIXED STYLES */}
+                      <div
+                        className={`dropdown-menu show position-absolute end-0 mt-2 shadow rounded-3 p-3`}
+                        style={{
+                          width: '280px',
+                          zIndex: 999,
+                          // ✅ FORCE OVERRIDE: Inline styles beat Bootstrap defaults in Prod
+                          backgroundColor: theme === 'dark' ? '#212529' : '#ffffff',
+                          color: theme === 'dark' ? '#ffffff' : '#212529',
+                          border: theme === 'dark' ? '1px solid #495057' : '1px solid rgba(0,0,0,0.15)'
+                        }}
                       >
                         <div className="d-flex align-items-center mb-3">
-                          <div className="rounded-circle bg-primary bg-opacity-10 p-3 me-3 d-flex align-items-center justify-content-center" style={{ width: '50px', height: '50px' }}>
-                             <i className="bi bi-person-fill text-primary" style={{ fontSize: '1.5rem' }}></i>
+                          <div
+                            className="rounded-circle p-3 me-3 d-flex align-items-center justify-content-center"
+                            style={{
+                              width: '50px',
+                              height: '50px',
+                              backgroundColor: theme === 'dark' ? 'rgba(13, 110, 253, 0.2)' : 'rgba(13, 110, 253, 0.1)'
+                            }}
+                          >
+                            <i className="bi bi-person-fill text-primary" style={{ fontSize: '1.5rem' }}></i>
                           </div>
                           <div className="overflow-hidden">
-                            <div className={`fw-bold text-truncate ${theme === 'dark' ? 'text-light' : 'text-dark'}`}>
+                            {/* Removed text-light/dark classes to let it inherit from parent */}
+                            <div className="fw-bold text-truncate">
                               {user.email?.split('@')[0]}
                             </div>
                             <div className={`small text-truncate ${theme === 'dark' ? 'text-secondary' : 'text-muted'}`}>
@@ -266,7 +281,7 @@ function App() {
                         </div>
 
                         <div className="mb-3">
-                           {emailVerified ? (
+                          {emailVerified ? (
                             <div className="d-flex align-items-center text-success small">
                               <i className="bi bi-check-circle-fill me-2"></i>
                               <span>Email Verified</span>
@@ -280,10 +295,10 @@ function App() {
                         </div>
 
                         <hr className={`dropdown-divider my-2 ${theme === 'dark' ? 'border-secondary' : ''}`} />
-                        
+
                         <button
                           onClick={handleSignOut}
-                          className="btn btn-outline-danger w-100 btn-sm d-flex align-items-center justify-content-center"
+                          className={`btn w-100 btn-sm d-flex align-items-center justify-content-center ${theme === 'dark' ? 'btn-outline-light' : 'btn-outline-danger'}`}
                         >
                           <i className="bi bi-box-arrow-right me-2"></i>
                           Sign Out

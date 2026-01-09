@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useNavigate, useLocation } from 'react-router-dom'; // Add this import
 import './PropertyComparison.css';
@@ -17,7 +17,7 @@ const INITIAL_PROPERTY_DATA = {
   purchasePrice: '',
   otherCharges: '',
   stampDuty: '',
-  exitPrices: [6000],
+  exitPrices: [],
   properties: [
     {
       id: DEFAULT_PROPERTY.id,
@@ -31,12 +31,12 @@ const INITIAL_PROPERTY_DATA = {
   ],
   paymentPlan: 'clp',
   assumptions: {
-    homeLoanRate: 8, homeLoanTerm: 20, homeLoanStartMonth: 25, homeLoanShare: '',
-    personalLoan1Rate: 11, personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
-    personalLoan2Rate: 11, personalLoan2Term: 7, personalLoan2StartMonth: 30, personalLoan2Share: 10,
-    downPaymentShare: 0,
-    investmentPeriod: 3, clpDurationYears: 2.5, bankDisbursementStartMonth: 3, bankDisbursementInterval: 3,
-    possessionMonths: 24
+    homeLoanRate: '', homeLoanTerm: '', homeLoanStartMonth: '', homeLoanShare: '',
+    personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: '',
+    personalLoan2Rate: '', personalLoan2Term: '', personalLoan2StartMonth: 30, personalLoan2Share: '',
+    downPaymentShare: '',
+    investmentPeriod: '', clpDurationYears: '', bankDisbursementStartMonth: '', bankDisbursementInterval: '',
+    possessionMonths: ''
   }
 };
 
@@ -44,11 +44,11 @@ const INITIAL_PROPERTY_DATA = {
 const INITIAL_USER_SELECTIONS = {
   selectedPropertyId: DEFAULT_PROPERTY.id,
   selectedExitPrice: DEFAULT_PROPERTY.exitPrice,
-  selectedYears: 3,
+  selectedYears: '',
   selectedPropertySize: DEFAULT_PROPERTY.size,
   scenarioSize: DEFAULT_PROPERTY.size,
   scenarioExitPrice: DEFAULT_PROPERTY.exitPrice,
-  scenarioExitPrices: [6000, 7000, 8000]
+  scenarioExitPrices: []
 };
 
 // ===================== 1. PURE UTILITIES (Moved Outside for Speed) =====================
@@ -280,13 +280,18 @@ const renderKeyInsights = (breakdown) => {
 
 const PropertyComparison = () => {
   // --- STATE ---
-
+  // Inside PropertyComparison component, with other states
+  const [validationError, setValidationError] = useState('');
   const location = useLocation();
 
   // ... existing state definitions ...
   const [activeTab, setActiveTab] = useState(location.state?.returnTab || 'inputs');
   const navigate = useNavigate();
-
+  // --- SCROLL & NAV LOGIC ---
+  const [showNav, setShowNav] = useState(true); // Is the floating nav visible?
+  const [isSticky, setIsSticky] = useState(false); // Are we past the threshold?
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const navRef = useRef(null);
   // ⬇️ ADD THIS USEEFFECT ⬇️
   // This clears the "redirect" instruction from the browser history
   // so that if you refresh later, it doesn't force you back to 'breakdown'.
@@ -298,6 +303,37 @@ const PropertyComparison = () => {
   }, [location.pathname, location.state, navigate]);
   // ⬆️ END ADDITION ⬆️
 
+  useEffect(() => {
+    const controlNavbar = () => {
+      const currentScrollY = window.scrollY;
+
+      // 1. Determine Sticky State (Float only after scrolling 220px)
+      if (currentScrollY > 220) {
+        setIsSticky(true);
+      } else {
+        setIsSticky(false);
+      }
+
+      // 2. Smart Hide/Show Logic (Only applies when sticky)
+      if (currentScrollY > lastScrollY && currentScrollY > 220) {
+        setShowNav(false); // Scrolling Down -> Hide
+      } else {
+        setShowNav(true);  // Scrolling Up -> Show
+      }
+
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', controlNavbar);
+    return () => window.removeEventListener('scroll', controlNavbar);
+  }, [lastScrollY]);
+
+  // Restore history
+  useEffect(() => {
+    if (location.state?.returnTab) {
+      navigate(location.pathname, { replace: true, state: {} });
+    }
+  }, [location.pathname, location.state, navigate]);
   // ... rest of your code ...
   // New State for Wizard Steps
   // 3. Wizard Step State (Smart Initialization)
@@ -520,7 +556,7 @@ const PropertyComparison = () => {
 
           if (month <= constructionMonths) {
             const monthsTillEnd = constructionMonths - month;
-            if (monthsTillEnd > 0) {
+            if (monthsTillEnd >= 0) {
               // 1. Interest for a SINGLE slab
               const singleSlabMonthlyInterest = slabAmount * (assumptions.homeLoanRate / 100) / 12;
 
@@ -531,19 +567,20 @@ const PropertyComparison = () => {
               // 3. Lifetime Cost of this specific slab
               const totalInterestForSlab = singleSlabMonthlyInterest * monthsTillEnd;
 
-              totalIDC += totalInterestForSlab;
 
               // Add to Schedule (for the hover table)
               idcSchedule.push({
-                slabNo: i + 1,                    // Col 1: Slab #
-                releaseMonth: month,              // Col 2: Release Month
-                timeRemaining: monthsTillEnd,     // Col 3: Time Remaining
+                slabNo: i + 1, // Col 1: Slab #
+                releaseMonth: month, // Col 2: Release Month
+                timeRemaining: monthsTillEnd,// Col 3: Time Remaining
                 currentTotalMonthlyEMI: currentTotalMonthlyEMI,
                 interestCost: totalInterestForSlab // Col 4: Interest Cost (Total for this slab)
               });
             }
           }
         }
+        // NEW (Correct): Sums up the specific interest cost of each slab
+        totalIDC = idcSchedule.reduce((acc, row) => acc + row.interestCost, 0);
         // Calculate Average
         monthlyIDCEMI = calculateMonthlyIDCEMI(totalIDC, constructionMonths);
       }
@@ -626,29 +663,42 @@ const PropertyComparison = () => {
       };
     };
 
+    const allExitPrices = Array.from(new Set([
+      userSelections.selectedExitPrice,
+      ...userSelections.scenarioExitPrices
+    ])).sort((a, b) => a - b);
     // 2. Perform All Calculations
     const propertySize = userSelections.selectedPropertySize;
     const detailedBreakdown = calculateFinancials(propertySize, userSelections.selectedExitPrice, userSelections.selectedYears);
     const comparisonTargetPrice = userSelections.scenarioExitPrices?.[0] || 0;
     const scenarioBreakdown = calculateFinancials(propertySize, comparisonTargetPrice, userSelections.selectedYears);
-    const profits = propertyData.exitPrices.map(price => {
+
+    const profits = allExitPrices.map(price => {
       const breakdown = calculateFinancials(propertySize, price, userSelections.selectedYears);
       return {
-        exitPrice: price, saleValue: breakdown.saleValue, netProfit: breakdown.netGainLoss,
+        exitPrice: price,
+        saleValue: breakdown.saleValue,
+        netProfit: breakdown.netGainLoss,
         roi: breakdown.totalCashInvested > 0 ? (breakdown.netGainLoss / breakdown.totalCashInvested) * 100 : 0,
         appreciation: ((price - propertyData.purchasePrice) / propertyData.purchasePrice) * 100,
-        cashInvested: breakdown.totalCashInvested, loanOutstanding: breakdown.totalLoanOutstanding
+        cashInvested: breakdown.totalCashInvested,
+        loanOutstanding: breakdown.totalLoanOutstanding
       };
     });
 
-    const multipleScenarios = userSelections.scenarioExitPrices.map(price => {
+    const multipleScenarios = allExitPrices.map(price => {
       const breakdown = calculateFinancials(propertySize, price, userSelections.selectedYears);
       return {
-        exitPrice: price, saleValue: breakdown.saleValue, netProfit: breakdown.netGainLoss,
+        exitPrice: price,
+        saleValue: breakdown.saleValue,
+        netProfit: breakdown.netGainLoss,
         roi: breakdown.totalCashInvested > 0 ? (breakdown.netGainLoss / breakdown.totalCashInvested) * 100 : 0,
         appreciation: ((price - propertyData.purchasePrice) / propertyData.purchasePrice) * 100,
-        cashInvested: breakdown.totalCashInvested, loanOutstanding: breakdown.totalLoanOutstanding,
-        leftoverCash: breakdown.leftoverCash, totalEMIPaid: breakdown.totalEMIPaid
+        cashInvested: breakdown.totalCashInvested,
+        loanOutstanding: breakdown.totalLoanOutstanding,
+        leftoverCash: breakdown.leftoverCash,
+        totalEMIPaid: breakdown.totalEMIPaid,
+        isSelected: price === userSelections.selectedExitPrice
       };
     });
 
@@ -716,7 +766,8 @@ const PropertyComparison = () => {
       ...prev,
       assumptions: {
         ...prev.assumptions,
-        [field]: parseFloat(value)
+        // FIX: If value is empty, keep it empty. Otherwise parse it.
+        [field]: value === '' ? '' : parseFloat(value)
       }
     }));
   };
@@ -798,12 +849,43 @@ const PropertyComparison = () => {
 
   // 💡 Hint Text Dictionary (Add this right before renderPropertyInput)
   const placeholders = {
+    // ... existing Step 1 fields ...
     name: "e.g. Supernova Tower A",
     location: "e.g. Sector 94, Noida",
     size: "e.g. 1250",
-    possessionMonths: "e.g. 24",
     purchasePrice: "e.g. 6500",
-    investmentPeriod: "e.g. 3"
+    otherCharges: "e.g. 500000",
+    stampDuty: "e.g. 7",
+
+    // --- STEP 2: Payment Plan ---
+    investmentPeriod: "e.g. 5 (Years)",
+    downPaymentShare: "e.g. 20",
+    homeLoanShare: "e.g. 80",
+    personalLoan1Share: "e.g. 10",
+    personalLoan2Share: "e.g. 10",
+
+    // --- STEP 3: Loan Config ---
+    possessionMonths: "e.g. 36 (Months)",
+
+    // Home Loan
+    homeLoanRate: "e.g. 8.5",
+    homeLoanTerm: "e.g. 20",
+    homeLoanStartMonth: "e.g. 1",
+
+    // Personal Loan 1
+    personalLoan1Rate: "e.g. 12",
+    personalLoan1Term: "e.g. 5",
+    personalLoan1StartMonth: "e.g. 0",
+
+    // Personal Loan 2
+    personalLoan2Rate: "e.g. 14",
+    personalLoan2Term: "e.g. 3",
+    personalLoan2StartMonth: "e.g. 24",
+
+    // CLP Specific
+    clpDurationYears: "e.g. 4",
+    bankDisbursementStartMonth: "e.g. 3",
+    bankDisbursementInterval: "e.g. 3"
   };
 
   // 2. UI Builder: Generates the input HTML automatically (UPDATED)
@@ -889,6 +971,100 @@ const PropertyComparison = () => {
       getSafeValue(propertyData.assumptions.personalLoan1Share) +
       getSafeValue(propertyData.assumptions.personalLoan2Share);
 
+    const validateCurrentStep = () => {
+      let isValid = true;
+      let errorMsg = '';
+
+      // Helper to check if value is empty/zero
+      const isEmpty = (val) => val === '' || val === null || val === undefined || val === 0 || Number.isNaN(val);
+      // Get the currently selected property
+      const currentProp = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId);
+
+      if (currentStep === 1) {
+        // Step 1: Property Details
+        if (!currentProp?.name) { isValid = false; errorMsg = 'Please enter a Property Name.'; }
+        else if (!currentProp?.location) { isValid = false; errorMsg = 'Please enter a Location.'; }
+        else if (isEmpty(currentProp?.size)) { isValid = false; errorMsg = 'Please enter Property Size.'; }
+        else if (isEmpty(propertyData.purchasePrice)) { isValid = false; errorMsg = 'Please enter Purchase Price.'; }
+      }
+      else if (currentStep === 2) {
+        // Step 2: Payment Plan Validation
+
+        // 1. Check Holding Period First (Priority)
+        if (isEmpty(propertyData.assumptions.investmentPeriod) || propertyData.assumptions.investmentPeriod <= 0) {
+          isValid = false;
+          errorMsg = 'Please enter a valid Holding Period (Years).';
+        }
+
+        // 2. If Holding Period is OK, check Custom Plan (only if 'custom' is selected)
+        else if (propertyData.paymentPlan === 'custom') {
+          const total = getSafeValue(propertyData.assumptions.downPaymentShare) +
+            getSafeValue(propertyData.assumptions.personalLoan1Share) +
+            getSafeValue(propertyData.assumptions.personalLoan2Share) +
+            getSafeValue(propertyData.assumptions.homeLoanShare);
+
+          if (total !== 100) {
+            isValid = false;
+            errorMsg = `Total allocation is ${total}%. It must be exactly 100%.`;
+          }
+        }
+      }
+      else if (currentStep === 3) {
+        // Step 3: Loan & Timeline Config
+
+        // 1. Basic Checks
+        if (isEmpty(propertyData.assumptions.possessionMonths) && propertyData.paymentPlan !== 'rtm') {
+          isValid = false; errorMsg = 'Please enter Estimated Possession Months.';
+        }
+        else if (isEmpty(propertyData.assumptions.homeLoanRate)) { isValid = false; errorMsg = 'Please enter Home Loan Rate.'; }
+        else if (isEmpty(propertyData.assumptions.homeLoanTerm)) { isValid = false; errorMsg = 'Please enter Home Loan Term.'; }
+
+        // 2. CLP Specific Logic
+        if (propertyData.paymentPlan === 'clp') {
+          if (isEmpty(propertyData.assumptions.clpDurationYears)) {
+            isValid = false; errorMsg = 'Please enter Construction Duration.';
+          }
+          else if (isEmpty(propertyData.assumptions.bankDisbursementInterval)) {
+            isValid = false; errorMsg = 'Please enter Disbursement Interval.';
+          }
+          else {
+            // ✅ NEW VALIDATION: Reality Check
+            const constructionMonths = parseFloat(propertyData.assumptions.clpDurationYears) * 12;
+            const possessionMonths = parseFloat(propertyData.assumptions.possessionMonths);
+
+            if (constructionMonths > possessionMonths) {
+              isValid = false;
+              errorMsg = `Logical Error: Construction (${constructionMonths}m) cannot exceed Possession time (${possessionMonths}m).`;
+            }
+          }
+        }
+      }
+      else if (currentStep === 4) {
+        // Step 4: Exit Scenarios
+        const selectedPrice = userSelections.selectedExitPrice;
+        const scenarioPrices = userSelections.scenarioExitPrices;
+
+        if (isEmpty(selectedPrice)) {
+          isValid = false; errorMsg = 'Please enter a Selected Exit Price.';
+        }
+        else if (scenarioPrices.includes(selectedPrice)) {
+          isValid = false; errorMsg = `Selected Price (${selectedPrice}) cannot be the same as a Scenario Price.`;
+        }
+        else if (new Set(scenarioPrices).size !== scenarioPrices.length) {
+          isValid = false; errorMsg = 'Scenario Exit Prices must be unique.';
+        }
+      }
+
+      if (!isValid) {
+        setValidationError(errorMsg);
+        setTimeout(() => setValidationError(''), 4000); // 4 seconds to read long messages
+      } else {
+        setValidationError('');
+      }
+
+      return isValid;
+    };
+
     // Include Home Loan in the total calculation safely
     const currentTotal = userDefinedTotal + getSafeValue(propertyData.assumptions.homeLoanShare);
 
@@ -901,9 +1077,17 @@ const PropertyComparison = () => {
       { id: 4, label: "Exit Scenarios", icon: "bi-graph-up-arrow" }
     ];
 
-    const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, steps.length));
-    const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 1));
+    // --- MODIFIED NEXT STEP FUNCTION ---
+    const handleNextStep = () => {
+      if (validateCurrentStep()) {
+        setCurrentStep(prev => Math.min(prev + 1, steps.length));
+      }
+    };
 
+    const prevStep = () => {
+      setValidationError(''); // Clear error when going back
+      setCurrentStep(prev => Math.max(prev - 1, 1));
+    };
     // --- STEPPER HEADER COMPONENT ---
     const renderStepper = () => (
       <div className="mb-3 position-relative">
@@ -961,28 +1145,48 @@ const PropertyComparison = () => {
 
     // --- NAVIGATION FOOTER ---
     const renderNavButtons = () => (
-      <div className="d-flex justify-content-between mt-5 pt-3 border-top">
-        {/* PREVIOUS BUTTON */}
-        {/* Disabled if on Step 1 */}
-        <button
-          className="btn btn-outline-secondary rounded-pill px-4"
-          onClick={prevStep}
-          disabled={currentStep === 1}
-        >
-          <i className="bi bi-arrow-left me-2"></i> Previous
-        </button>
+      <div className="mt-5 pt-3 border-top">
 
-        {/* NEXT / ANALYZE BUTTON */}
-        {/* If not last step, show "Next". If last step, show "Analyze". */}
-        {currentStep < steps.length ? (
-          <button className="btn btn-primary rounded-pill px-4" onClick={nextStep}>
-            Next Step <i className="bi bi-arrow-right ms-2"></i>
-          </button>
-        ) : (
-          <button className="btn btn-primary rounded-pill px-5 shadow-lg" onClick={handleAnalyzeClick}>
-            Analyze Property <i className="bi bi-graph-up ms-2"></i>
-          </button>
+        {/* Error Message Display */}
+        {validationError && (
+          <div className="alert alert-danger py-2 mb-3 text-center animate-fade-in" role="alert">
+            <i className="bi bi-exclamation-circle-fill me-2"></i>
+            {validationError}
+          </div>
         )}
+
+        <div className="d-flex justify-content-between">
+          {/* PREVIOUS BUTTON */}
+          <button
+            className="btn btn-outline-secondary rounded-pill px-4"
+            onClick={prevStep}
+            disabled={currentStep === 1}
+          >
+            <i className="bi bi-arrow-left me-2"></i> Previous
+          </button>
+
+          {/* NEXT / ANALYZE BUTTON */}
+          {currentStep < steps.length ? (
+            // Logic for Steps 1, 2, 3 (Already correct)
+            <button className="btn btn-primary rounded-pill px-4" onClick={handleNextStep}>
+              Next Step <i className="bi bi-arrow-right ms-2"></i>
+            </button>
+          ) : (
+            // Logic for Step 4 (THE FIX IS HERE)
+            <button
+              className="btn btn-primary rounded-pill px-5 shadow-lg"
+              onClick={() => {
+                // 1. Run Validation First
+                if (validateCurrentStep()) {
+                  // 2. Only if valid, run the analyze function
+                  handleAnalyzeClick();
+                }
+              }}
+            >
+              Analyze Property <i className="bi bi-graph-up ms-2"></i>
+            </button>
+          )}
+        </div>
       </div>
     );
 
@@ -1131,6 +1335,7 @@ const PropertyComparison = () => {
                         type="number"
                         className="form-control"
                         value={propertyData.assumptions.investmentPeriod}
+                        placeholder={placeholders.investmentPeriod}
                         onChange={(e) => handleAssumptionChange('investmentPeriod', e.target.value)}
                       />
                     </div>
@@ -1152,6 +1357,7 @@ const PropertyComparison = () => {
                             min="0"
                             max="100"
                             value={propertyData.assumptions.downPaymentShare}
+                            placeholder={placeholders.investmentPeriod}
                             onChange={(e) => handleAssumptionChange('downPaymentShare', e.target.value)}
                           />
                           <small className="text-muted">Cash payment (no loan)</small>
@@ -1177,6 +1383,7 @@ const PropertyComparison = () => {
                             min="0"
                             max="100"
                             value={propertyData.assumptions.personalLoan1Share}
+                            placeholder={placeholders.investmentPeriod}
                             onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
                           />
                         </div>
@@ -1188,6 +1395,7 @@ const PropertyComparison = () => {
                             min="0"
                             max="100"
                             value={propertyData.assumptions.personalLoan2Share}
+                            placeholder={placeholders.investmentPeriod}
                             onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
                           />
                         </div>
@@ -1234,6 +1442,7 @@ const PropertyComparison = () => {
                           type="number"
                           className="form-control"
                           value={propertyData.assumptions.possessionMonths}
+                          placeholder={placeholders.investmentPeriod}
                           onChange={(e) => handleAssumptionChange('possessionMonths', e.target.value)}
                         />
                         <span className="input-group-text">months</span>
@@ -1267,10 +1476,21 @@ const PropertyComparison = () => {
                           step="0.1"
                           className="form-control"
                           value={propertyData.assumptions.homeLoanRate}
+                          placeholder={placeholders.homeLoanRate}
                           onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
                         />
                         <span className="input-group-text bg-white text-muted">%</span>
                       </div>
+                    </div>
+                    <div className="col-md-3">
+                      <label className="form-label">Loan Term (Years)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={propertyData.assumptions.homeLoanTerm}
+                        placeholder={placeholders.investmentPeriod}
+                        onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
+                      />
                     </div>
                     <div className="col-md-3">
                       <label className="form-label">
@@ -1290,15 +1510,6 @@ const PropertyComparison = () => {
                         <small>Month 0</small>
                         <small>240 months</small>
                       </div>
-                    </div>
-                    <div className="col-md-3">
-                      <label className="form-label">Loan Term (Years)</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        value={propertyData.assumptions.homeLoanTerm}
-                        onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
-                      />
                     </div>
                     <div className="col-md-3">
                       <div className="p-3 bg-light rounded h-100">
@@ -1326,6 +1537,7 @@ const PropertyComparison = () => {
                         className="form-control"
                         value={propertyData.assumptions.personalLoan1Share}
                         onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
+                        placeholder={placeholders.investmentPeriod}
                         disabled={propertyData.paymentPlan !== 'custom'}
                       />
                       {propertyData.paymentPlan !== 'custom' && (
@@ -1345,6 +1557,7 @@ const PropertyComparison = () => {
                         step="0.1"
                         className="form-control"
                         value={propertyData.assumptions.personalLoan1Rate}
+                        placeholder={placeholders.personalLoan1Rate}
                         onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
                       />
                     </div>
@@ -1404,6 +1617,7 @@ const PropertyComparison = () => {
                         className="form-control"
                         value={propertyData.assumptions.personalLoan2Rate}
                         onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
+                        placeholder={placeholders.personalLoan2Rate}
                         disabled={propertyData.assumptions.personalLoan2Share === 0}
                       />
                       {propertyData.assumptions.personalLoan2Share === 0 && (
@@ -1448,6 +1662,7 @@ const PropertyComparison = () => {
                           step="0.5"
                           className="form-control"
                           value={propertyData.assumptions.clpDurationYears}
+                          placeholder={placeholders.clpDurationYears}
                           onChange={(e) => handleAssumptionChange('clpDurationYears', e.target.value)}
                         />
                         <small className="text-muted">Total construction period</small>
@@ -1458,6 +1673,7 @@ const PropertyComparison = () => {
                           type="number"
                           className="form-control"
                           value={propertyData.assumptions.bankDisbursementStartMonth}
+                          placeholder={placeholders.bankDisbursementStartMonth}
                           onChange={(e) => handleAssumptionChange('bankDisbursementStartMonth', e.target.value)}
                         />
                         <small className="text-muted">Month when first disbursement occurs</small>
@@ -1468,6 +1684,7 @@ const PropertyComparison = () => {
                           type="number"
                           className="form-control"
                           value={propertyData.assumptions.bankDisbursementInterval}
+                          placeholder={placeholders.bankDisbursementInterval}
                           onChange={(e) => handleAssumptionChange('bankDisbursementInterval', e.target.value)}
                         />
                         <small className="text-muted">Months between disbursements</small>
@@ -1917,78 +2134,63 @@ const PropertyComparison = () => {
         {/* 3. Profit Chart */}
         {renderProfitChart(calculatedData.profits)}
 
-        {/* 4. Comparison Table (Corrected with Array Index) */}
-        <div className="glass-card mb-5 p-4">
-          <div className="card-header">
-            <h5 className="mb-0 pb-2 border-bottom border-secondary border-opacity-25">
-              <i className="bi bi-table me-2"></i>
-              Exit Price Comparison
-            </h5>
-            <small className="opacity-45">Comparing Current Plan vs Scenario 1</small>
-          </div>
-          <div className="card-body">
-            <div className="table-responsive">
-              <table className="table table-hover align-middle mb-0">
-                <thead className="table-light">
-                  <tr>
-                    <th className="ps-3">Metric</th>
-                    <th>Current Scenario</th>
-                    <th className="text-primary">Scenario 1</th>
-                    <th>Difference</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* Property Size - Always 0 Diff */}
-                  <tr>
-                    <td className="ps-3 fw-bold text-muted">Property Size</td>
-                    <td>{userSelections.selectedPropertySize} sq.ft</td>
-                    <td>{userSelections.selectedPropertySize} sq.ft</td>
-                    <td className="text-muted">0 sq.ft</td>
-                  </tr>
+        {/* Multiple Exit Price Scenarios */}
+        <div style={{ maxWidth: '1350px', margin: '0 auto' }}>
+          <div className="row m-4 pt-5">
+            <div className="col-12">
 
-                  {/* Exit Price - Reads from Array[0] */}
-                  <tr>
-                    <td className="ps-3 fw-bold text-muted">Exit Price</td>
-                    <td>₹{userSelections.selectedExitPrice}/sq.ft</td>
-                    <td>₹{userSelections.scenarioExitPrices?.[0] || 0}/sq.ft</td>
-                    <td className={(userSelections.scenarioExitPrices?.[0] || 0) >= userSelections.selectedExitPrice ? 'text-success' : 'text-danger'}>
-                      {(userSelections.scenarioExitPrices?.[0] || 0) > userSelections.selectedExitPrice ? '+' : ''}
-                      ₹{(userSelections.scenarioExitPrices?.[0] || 0) - userSelections.selectedExitPrice}/sq.ft
-                    </td>
-                  </tr>
+              {/* ✅ CHANGED: Replaced 'p-3 bg-light rounded' with 'glass-card' */}
+              <div className="glass-card mb-5 p-4">
 
-                  {/* Net Gain - Reads from Multiple Scenarios Array[0] */}
-                  <tr>
-                    <td className="ps-3 fw-bold text-muted">Net Gain/Loss</td>
-                    <td className={breakdown.netGainLoss >= 0 ? 'text-success' : 'text-danger'}>
-                      {formatLakhs(breakdown.netGainLoss)}
-                    </td>
-                    <td className={calculatedData.multipleScenarios?.[0]?.netProfit >= 0 ? 'text-success' : 'text-danger'}>
-                      {formatLakhs(calculatedData.multipleScenarios?.[0]?.netProfit)}
-                    </td>
-                    <td className={(calculatedData.multipleScenarios?.[0]?.netProfit || 0) > breakdown.netGainLoss ? 'text-success fw-bold' : 'text-danger fw-bold'}>
-                      {(calculatedData.multipleScenarios?.[0]?.netProfit || 0) > breakdown.netGainLoss ? '+' : ''}
-                      {formatLakhs((calculatedData.multipleScenarios?.[0]?.netProfit || 0) - breakdown.netGainLoss)}
-                    </td>
-                  </tr>
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <h6 className="mb-0 fw-bold">
+                    <i className="bi bi-bar-chart me-2"></i>
+                    Multiple Exit Price Scenarios
+                  </h6>
+                  <span className="badge bg-primary">
+                    {calculatedData.multipleScenarios?.length || 0} scenarios
+                  </span>
+                </div>
 
-                  {/* ROI - Reads from Multiple Scenarios Array[0] */}
-                  <tr>
-                    <td className="ps-3 fw-bold text-muted">ROI</td>
-                    <td className={breakdown.roi >= 0 ? 'text-success' : 'text-danger'}>
-                      {formatPercent(breakdown.roi)}
-                    </td>
-                    <td className={calculatedData.multipleScenarios?.[0]?.roi >= 0 ? 'text-success' : 'text-danger'}>
-                      {formatPercent(calculatedData.multipleScenarios?.[0]?.roi)}
-                    </td>
-                    <td className={(calculatedData.multipleScenarios?.[0]?.roi || 0) > breakdown.roi ? 'text-success fw-bold' : 'text-danger fw-bold'}>
-                      {(calculatedData.multipleScenarios?.[0]?.roi || 0) > breakdown.roi ? '+' : ''}
-                      {formatPercent((calculatedData.multipleScenarios?.[0]?.roi || 0) - breakdown.roi)}
-                    </td>
-                  </tr>
+                <div className="table-responsive">
+                  <table className="table table-bordered table-hover mb-0">
+                    <thead>
+                      <tr>
+                        <th>Scenario</th>
+                        <th>Exit Price (₹/sq.ft)</th>
+                        <th>Sale Value</th>
+                        <th>Leftover Cash</th>
+                        <th>Net Profit/Loss</th>
+                        <th>ROI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calculatedData.multipleScenarios?.map((scenario, index) => (
+                        <tr key={index} className={scenario.exitPrice === userSelections.selectedExitPrice ? 'table-primary' : ''}>
+                          <td>Scenario {index + 1}</td>
+                          <td>
+                            <strong>₹{scenario.exitPrice}</strong>
+                            {scenario.exitPrice === userSelections.selectedExitPrice && (
+                              <span className="badge bg-primary ms-2">Selected</span>
+                            )}
+                          </td>
+                          <td>{formatLakhs(scenario.saleValue)}</td>
+                          <td className={scenario.leftoverCash >= 0 ? 'text-success' : 'text-danger'}>
+                            {formatLakhs(scenario.leftoverCash)}
+                          </td>
+                          <td className={scenario.netProfit >= 0 ? 'text-success' : 'text-danger'}>
+                            {formatLakhs(scenario.netProfit)}
+                          </td>
+                          <td className={scenario.roi >= 0 ? 'text-success' : 'text-danger'}>
+                            {formatPercent(scenario.roi)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
 
-                </tbody>
-              </table>
+              </div>
             </div>
           </div>
         </div>
@@ -2000,7 +2202,7 @@ const PropertyComparison = () => {
             Payment Plan Breakdown
           </h5>
           <div className="row">
-            <div className="col-md-6 mb-4 mb-md-0">
+            <div className="col-md-4 mb-4 mb-md-0">
               <div className="p-2">
                 <h6 className="mb-3 opacity-75">Funding Distribution</h6>
                 {renderFundingBar("Home Loan", breakdown.homeLoanShare, "primary")}
@@ -2009,7 +2211,7 @@ const PropertyComparison = () => {
                 {breakdown.hasPersonalLoan2 && renderFundingBar("Personal Loan 2", breakdown.personalLoan2Share, "warning")}
               </div>
             </div>
-            <div className="col-md-6">
+            <div className="col-md-8">
               <div className="p-2">
                 <h6 className="mb-3 opacity-75">Key Metrics</h6>
                 <div className="row g-2">
@@ -2146,9 +2348,9 @@ const PropertyComparison = () => {
 
                   {/* Timeline 1: Pre-Possession (Total Cost View + Hover Table) */}
                   {renderTimelineCard(
-                    "Timeline 1: Pre-Possession",    // 1. Title
-                    "bi-calendar-week",              // 2. Icon
-                    "primary",                       // 3. Color
+                    "Timeline 1: Pre-Possession",    // 1. Title
+                    "bi-calendar-week",              // 2. Icon
+                    "primary",                       // 3. Color
 
                     // 4. MAIN VALUE (The Big Number)
                     formatCurrency(breakdown.prePossessionTotal),
@@ -2176,7 +2378,8 @@ const PropertyComparison = () => {
                                 totalIDC: breakdown.totalIDC,
                                 propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
                                 possessionMonths: breakdown.possessionMonths, // To filter rows
-                                totalPaid: breakdown.prePossessionTotal
+                                totalPaid: breakdown.prePossessionTotal,
+                                homeLoanAmount: breakdown.homeLoanAmount
                               }
                             })}
                           >
@@ -2225,7 +2428,7 @@ const PropertyComparison = () => {
                       }
                     </>,
                     formatCurrency(breakdown.postPossessionTotal),
-                    `(${breakdown.postPossessionMonths} months × ${formatCurrency(breakdown.postPossessionEMI)})`
+                    `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`
                   )}
 
                 </div>
@@ -2239,7 +2442,7 @@ const PropertyComparison = () => {
                           <h6 className="mb-1 fw-bold">Total EMI Commitment</h6>
                           <small>Combined across both timelines</small>
                           {breakdown.hasIDC && (
-                            <div className="mt-2 text-white-50 small">
+                            <div className="mt-2 small">
                               <i className="bi bi-info-circle me-1"></i>
                               Includes Monthly IDC ({formatCurrency(breakdown.monthlyIDCEMI)})
                             </div>
@@ -2334,60 +2537,6 @@ const PropertyComparison = () => {
               breakdown.pl2PaymentsMade
             )}
 
-            {/* Multiple Exit Price Scenarios */}
-            <div className="row m-4">
-              <div className="col-12">
-                <div className="p-3 bg-light rounded">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="mb-0">
-                      <i className="bi bi-bar-chart me-2"></i>
-                      Multiple Exit Price Scenarios
-                    </h6>
-                    <span className="badge bg-primary">
-                      {calculatedData.multipleScenarios?.length || 0} scenarios
-                    </span>
-                  </div>
-                  <div className="table-responsive">
-                    <table className="table table-bordered table-hover">
-                      <thead>
-                        <tr>
-                          <th>Scenario</th>
-                          <th>Exit Price (₹/sq.ft)</th>
-                          <th>Sale Value</th>
-                          <th>Leftover Cash</th>
-                          <th>Net Profit/Loss</th>
-                          <th>ROI</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {calculatedData.multipleScenarios?.map((scenario, index) => (
-                          <tr key={index} className={scenario.exitPrice === userSelections.selectedExitPrice ? 'table-primary' : ''}>
-                            <td>Scenario {index + 1}</td>
-                            <td>
-                              <strong>₹{scenario.exitPrice}</strong>
-                              {scenario.exitPrice === userSelections.selectedExitPrice && (
-                                <span className="badge bg-primary ms-2">Selected</span>
-                              )}
-                            </td>
-                            <td>{formatLakhs(scenario.saleValue)}</td>
-                            <td className={scenario.leftoverCash >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(scenario.leftoverCash)}
-                            </td>
-                            <td className={scenario.netProfit >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(scenario.netProfit)}
-                            </td>
-                            <td className={scenario.roi >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatPercent(scenario.roi)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Total Loan Summary */}
             <div className="row m-4">
               <div className="col-12">
@@ -2470,83 +2619,59 @@ const PropertyComparison = () => {
               )}
             </div>
 
-            {/* Scenario Comparison */}
-            {calculatedData.scenarioBreakdown && (
-              <div className="row m-4">
-                <div className="col-12">
-                  <div className="p-3 bg-light rounded">
-                    <h6 className="mb-3">
-                      <i className="bi bi-arrow-left-right me-2"></i>
-                      Scenario Comparison
+            {/* Multiple Exit Price Scenarios */}
+            <div className="row m-4">
+              <div className="col-12">
+                <div className="p-3 bg-light rounded">
+                  <div className="d-flex justify-content-between align-items-center mb-3">
+                    <h6 className="mb-0">
+                      <i className="bi bi-bar-chart me-2"></i>
+                      Multiple Exit Price Scenarios
                     </h6>
-                    <div className="table-responsive">
-                      <table className="table table-bordered">
-                        <thead>
-                          <tr>
-                            <th>Metric</th>
-                            <th>Current Scenario</th>
-                            <th>Comparison Scenario</th>
-                            <th>Difference</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          <tr>
-                            <td>Property Size</td>
-                            <td>{userSelections.selectedPropertySize} sq.ft</td>
-                            <td>{userSelections.scenarioSize} sq.ft</td>
+                    <span className="badge bg-primary">
+                      {calculatedData.multipleScenarios?.length || 0} scenarios
+                    </span>
+                  </div>
+                  <div className="table-responsive">
+                    <table className="table table-bordered table-hover">
+                      <thead>
+                        <tr>
+                          <th>Scenario</th>
+                          <th>Exit Price (₹/sq.ft)</th>
+                          <th>Sale Value</th>
+                          <th>Leftover Cash</th>
+                          <th>Net Profit/Loss</th>
+                          <th>ROI</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {calculatedData.multipleScenarios?.map((scenario, index) => (
+                          <tr key={index} className={scenario.exitPrice === userSelections.selectedExitPrice ? 'table-primary' : ''}>
+                            <td>Scenario {index + 1}</td>
                             <td>
-                              {(userSelections.scenarioSize - userSelections.selectedPropertySize) > 0 ? '+' : ''}
-                              {userSelections.scenarioSize - userSelections.selectedPropertySize} sq.ft
+                              <strong>₹{scenario.exitPrice}</strong>
+                              {scenario.exitPrice === userSelections.selectedExitPrice && (
+                                <span className="badge bg-primary ms-2">Selected</span>
+                              )}
+                            </td>
+                            <td>{formatLakhs(scenario.saleValue)}</td>
+                            <td className={scenario.leftoverCash >= 0 ? 'text-success' : 'text-danger'}>
+                              {formatLakhs(scenario.leftoverCash)}
+                            </td>
+                            <td className={scenario.netProfit >= 0 ? 'text-success' : 'text-danger'}>
+                              {formatLakhs(scenario.netProfit)}
+                            </td>
+                            <td className={scenario.roi >= 0 ? 'text-success' : 'text-danger'}>
+                              {formatPercent(scenario.roi)}
                             </td>
                           </tr>
-                          <tr>
-                            <td>Exit Price</td>
-                            <td>₹{userSelections.selectedExitPrice}/sq.ft</td>
-                            <td>₹{userSelections.scenarioExitPrices[0]}/sq.ft</td>
-                            <td className={(userSelections.scenarioExitPrices?.[0] || 0) >= userSelections.selectedExitPrice ? 'text-success' : 'text-danger'}>
-                              {(userSelections.scenarioExitPrices?.[0] || 0) > userSelections.selectedExitPrice ? '+' : ''}
-                              ₹{(userSelections.scenarioExitPrices?.[0] || 0) - userSelections.selectedExitPrice}/sq.ft
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>Leftover Cash</td>
-                            <td>{formatLakhs(breakdown.leftoverCash)}</td>
-                            <td>{formatLakhs(calculatedData.scenarioBreakdown.leftoverCash)}</td>
-                            <td className={calculatedData.scenarioBreakdown.leftoverCash > breakdown.leftoverCash ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(calculatedData.scenarioBreakdown.leftoverCash - breakdown.leftoverCash)}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>Net Gain/Loss</td>
-                            <td className={breakdown.netGainLoss >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(breakdown.netGainLoss)}
-                            </td>
-                            <td className={calculatedData.scenarioBreakdown.netGainLoss >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(calculatedData.scenarioBreakdown.netGainLoss)}
-                            </td>
-                            <td className={calculatedData.scenarioBreakdown.netGainLoss > breakdown.netGainLoss ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(calculatedData.scenarioBreakdown.netGainLoss - breakdown.netGainLoss)}
-                            </td>
-                          </tr>
-                          <tr>
-                            <td>ROI</td>
-                            <td className={breakdown.roi >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatPercent(breakdown.roi)}
-                            </td>
-                            <td className={calculatedData.scenarioBreakdown.roi >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatPercent(calculatedData.scenarioBreakdown.roi)}
-                            </td>
-                            <td className={calculatedData.scenarioBreakdown.roi > breakdown.roi ? 'text-success' : 'text-danger'}>
-                              {formatPercent(calculatedData.scenarioBreakdown.roi - breakdown.roi)}
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
@@ -2568,49 +2693,69 @@ const PropertyComparison = () => {
 
   return (
     <div className="property-comparison">
-      <div className="position-fixed top-0 left-0 w-100 h-100" style={{ zIndex: -1 }}>
-        {/* Left Blob - Increased opacity to 0.15 */}
-        <div className="position-absolute top-0 start-0 w-100 h-100"
-          style={{ background: 'radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.15) 0%, transparent 50%)' }}></div>
 
-        {/* Right Blob - Increased opacity to 0.15 */}
-        <div className="position-absolute top-0 end-0 w-100 h-100"
-          style={{ background: 'radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%)' }}></div>
+      {/* Background Blobs */}
+      <div className="position-fixed top-0 left-0 w-100 h-100" style={{ zIndex: -1 }}>
+        <div className="position-absolute top-0 start-0 w-100 h-100" style={{ background: 'radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.15) 0%, transparent 50%)' }}></div>
+        <div className="position-absolute top-0 end-0 w-100 h-100" style={{ background: 'radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%)' }}></div>
       </div>
 
       <div className="container-fluid py-4">
         <div className="row justify-content-center">
           <div className="col-12 col-xxl-10">
 
-            {/* Main Header */}
+            {/* Main Header Text */}
             <div className="text-center mb-4 pt-3">
-
               <p className="lead text-light opacity-90 mb-4" style={{ letterSpacing: '0.5px' }}>
                 Model your payment plan, optimize loans, and forecast returns.
               </p>
+            </div>
 
-              {/* Navigation Tabs - Modern Segmented Style */}
-              <div className="d-flex justify-content-center mb-2">
-                <div className="glass-card p-1 rounded-pill d-inline-flex border border-secondary border-opacity-25">
-                  {[
-                    { id: 'inputs', icon: 'bi-input-cursor', label: 'Input Parameters' },
-                    { id: 'overview', icon: 'bi-speedometer2', label: 'Analysis Overview' },
-                    { id: 'breakdown', icon: 'bi-calculator', label: 'Detailed Breakdown' }
-                  ].map((tab) => (
-                    <button
-                      key={tab.id}
-                      onClick={() => setActiveTab(tab.id)}
-                      className={`btn rounded-pill px-4 py-2 d-flex align-items-center border-0 ${activeTab === tab.id
-                        ? 'btn-primary shadow-sm fw-bold' // Active Style
-                        : 'text-secondary hover-text-primary' // Inactive Style (Clean text)
-                        }`}
-                      style={{ transition: 'all 0.3s ease' }}
-                    >
-                      <i className={`bi ${tab.icon} me-2`}></i>
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
+            {/* ✅ FIXED: Intelligent Navigation Bar */}
+            {/* Wrapper Div (Min-Height prevents layout jump when tabs become fixed) */}
+            <div
+              ref={navRef}
+              style={{ minHeight: '60px', marginBottom: '20px', display: 'flex', justifyContent: 'center' }}
+            >
+              <div
+                className="glass-card p-1 rounded-pill d-inline-flex border border-secondary border-opacity-25"
+                style={{
+                  // Dynamic Styles
+                  position: isSticky ? 'fixed' : 'relative',
+                  top: isSticky ? '20px' : 'auto',
+                  zIndex: 1000,
+                  transition: 'transform 0.3s ease-in-out, opacity 0.3s ease-in-out',
+
+                  // Smart Hide/Show Logic
+                  transform: isSticky && !showNav ? 'translateY(-150%)' : 'translateY(0)',
+                  opacity: isSticky && !showNav ? 0 : 1,
+
+                  // Visual Polish
+                  backdropFilter: 'blur(12px)',
+                  boxShadow: isSticky ? '0 10px 30px rgba(0,0,0,0.2)' : 'none'
+                }}
+              >
+                {[
+                  { id: 'inputs', icon: 'bi-input-cursor', label: 'Input Parameters' },
+                  { id: 'overview', icon: 'bi-speedometer2', label: 'Analysis Overview' },
+                  { id: 'breakdown', icon: 'bi-calculator', label: 'Detailed Breakdown' }
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      if (isSticky) window.scrollTo({ top: 0, behavior: 'smooth' });
+                    }}
+                    className={`btn rounded-pill px-4 py-2 d-flex align-items-center border-0 ${activeTab === tab.id
+                      ? 'btn-primary shadow-sm fw-bold'
+                      : 'text-secondary hover-text-primary'
+                      }`}
+                    style={{ transition: 'all 0.3s ease' }}
+                  >
+                    <i className={`bi ${tab.icon} me-2`}></i>
+                    {tab.label}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -2634,4 +2779,4 @@ const PropertyComparison = () => {
   );
 };
 
-export default PropertyComparison;
+export default PropertyComparison; 

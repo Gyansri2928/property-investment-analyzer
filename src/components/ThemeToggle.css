@@ -1,0 +1,115 @@
+/* =========================================
+   THEME TOGGLE CONTAINER
+   ========================================= */
+.theme-toggle-wrapper {
+    cursor: pointer;
+    display: inline-block;
+    width: 64px;
+    height: 32px;
+    position: relative;
+    border-radius: 50px;
+    /* Ensure no text selection interferes */
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    
+    /* Smooth background color transition */
+    transition: background-color 0.4s ease, border-color 0.4s ease;
+}
+
+/* =========================================
+   SHARED STRUCTURE
+   ========================================= */
+.toggle-track {
+    width: 100%;
+    height: 100%;
+    border-radius: 50px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* The Sliding Circle (Thumb) */
+.toggle-thumb {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    z-index: 1;
+
+    /* ⚡ FORCE ANIMATION: This ensures it slides instead of snapping */
+    transition: transform 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) !important; 
+    
+    /* ⚡ FORCE HARDWARE ACCELERATION: Makes it smooth */
+    will-change: transform; 
+}
+
+/* Icons Container */
+.icons-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 7px;
+    z-index: 2;
+    pointer-events: none;
+}
+
+.icons-container i {
+    font-size: 14px;
+    transition: all 0.4s ease;
+}
+
+/* =========================================
+   LIGHT MODE STATE
+   ========================================= */
+.theme-toggle-wrapper.light .toggle-track {
+    background-color: #e9ecef;
+    border: 1px solid #ced4da;
+}
+
+.theme-toggle-wrapper.light .toggle-thumb {
+    background-color: #ffffff;
+    transform: translateX(0px); /* START POSITION */
+    box-shadow: 2px 0 5px rgba(0,0,0,0.15);
+}
+
+.theme-toggle-wrapper.light .sun-icon {
+    color: #f59e0b; /* Active Sun */
+    opacity: 1;
+    transform: scale(1);
+}
+.theme-toggle-wrapper.light .moon-icon {
+    color: #adb5bd; /* Inactive Moon */
+    opacity: 0.5;
+    transform: scale(0.8);
+}
+
+/* =========================================
+   DARK MODE STATE
+   ========================================= */
+.theme-toggle-wrapper.dark .toggle-track {
+    background-color: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.theme-toggle-wrapper.dark .toggle-thumb {
+    background-color: #4a5568;
+    transform: translateX(32px); /* END POSITION (Slides Right) */
+    box-shadow: -2px 0 5px rgba(0,0,0,0.3);
+}
+
+.theme-toggle-wrapper.dark .sun-icon {
+    color: rgba(255, 255, 255, 0.2); /* Inactive Sun */
+    opacity: 0.5;
+    transform: scale(0.8);
+}
+.theme-toggle-wrapper.dark .moon-icon {
+    color: #fcd34d; /* Active Moon */
+    opacity: 1;
+    transform: scale(1);
+}
