@@ -31,10 +31,10 @@ const INITIAL_PROPERTY_DATA = {
   ],
   paymentPlan: 'clp',
   assumptions: {
-    homeLoanRate: '', homeLoanTerm: '', homeLoanStartMonth: '', homeLoanShare: '',
-    personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: '',
-    personalLoan2Rate: '', personalLoan2Term: '', personalLoan2StartMonth: 30, personalLoan2Share: '',
-    downPaymentShare: '',
+    homeLoanRate: '', homeLoanTerm: '', homeLoanStartMonth: '', homeLoanShare: 80,
+    personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
+    personalLoan2Rate: '', personalLoan2Term: '', personalLoan2StartMonth: 30, personalLoan2Share: 10,
+    downPaymentShare: 0,
     investmentPeriod: '', clpDurationYears: '', bankDisbursementStartMonth: '', bankDisbursementInterval: '',
     possessionMonths: ''
   }
@@ -482,12 +482,48 @@ const PropertyComparison = () => {
   // It automatically recalculates ONLY when propertyData or userSelections change.
 
   const handleResetData = () => {
-    if (window.confirm("Are you sure you want to reset all data to default values?")) {
-      setPropertyData(INITIAL_PROPERTY_DATA);
-      setUserSelections(INITIAL_USER_SELECTIONS);
-      localStorage.removeItem('propertyCalc_data');
-      localStorage.removeItem('propertyCalc_selections');
-      alert("Data reset successfully.");
+    // 1. Updated confirmation message
+    if (window.confirm("Reset Property Details? \n(Note: Your Loan Distribution & Payment Plan settings will be KEPT)")) {
+      
+      setPropertyData(prev => ({
+        ...INITIAL_PROPERTY_DATA, // Clears Price, Size, Name
+        
+        // Restore your existing Financial Settings
+        paymentPlan: prev.paymentPlan, 
+        assumptions: {
+          ...INITIAL_PROPERTY_DATA.assumptions, 
+          // KEEP THE SHARES:
+          homeLoanShare: prev.assumptions.homeLoanShare,
+          personalLoan1Share: prev.assumptions.personalLoan1Share,
+          personalLoan2Share: prev.assumptions.personalLoan2Share,
+          downPaymentShare: prev.assumptions.downPaymentShare,
+          
+          // Keep specific CLP settings:
+          clpDurationYears: prev.assumptions.clpDurationYears,
+          bankDisbursementInterval: prev.assumptions.bankDisbursementInterval,
+          
+          // Reset possession as it varies per property
+          possessionMonths: '' 
+        },
+        
+        // Reset properties list to default
+        properties: [
+            {
+              id: 1,
+              size: 1428, // Reset to default size or ''
+              name: '',
+              location: '',
+              rating: 0,
+              isHighlighted: true,
+              possessionMonths: ''
+            }
+        ]
+      }));
+      
+      // ✅ FIX: Move Progress Bar back to Step 1
+      setCurrentStep(1);
+      
+      alert("Property details reset. Loan settings preserved.");
     }
   };
   const calculatedData = useMemo(() => {
@@ -555,7 +591,7 @@ const PropertyComparison = () => {
           const month = assumptions.bankDisbursementStartMonth + (i * assumptions.bankDisbursementInterval);
 
           if (month <= constructionMonths) {
-            const monthsTillEnd = constructionMonths - month;
+            const monthsTillEnd = (constructionMonths - month) + 1;
             if (monthsTillEnd >= 0) {
               // 1. Interest for a SINGLE slab
               const singleSlabMonthlyInterest = slabAmount * (assumptions.homeLoanRate / 100) / 12;
@@ -1204,14 +1240,13 @@ const PropertyComparison = () => {
               </p>
             </div>
 
-            {/* ✅ NEW GREEN RESET BUTTON */}
             <button
-              className="btn btn-outline-success d-flex align-items-center shadow-sm"
+              className="btn btn-success d-flex align-items-center shadow-sm"
               onClick={handleResetData}
               title="Reset all fields to default values"
-              style={{ 
-                borderRadius: '50px', 
-                padding: '8px 20px', 
+              style={{
+                borderRadius: '50px',
+                padding: '8px 20px',
                 borderWidth: '2px',
                 fontWeight: '600'
               }}
@@ -1302,17 +1337,6 @@ const PropertyComparison = () => {
                         ))}
                       </select>
                     </div>
-                  </div>
-                </div>
-                <div className="text-center mt-4 pt-2">
-                  <button
-                    className="btn btn-sm btn-outline-danger border-10 opacity-15"
-                    onClick={handleResetData}
-                  >
-                    <i className="bi bi-arrow-counterclockwise me-2"></i>Reset All Inputs
-                  </button>
-                  <div className="text-muted extra-small mt-1" style={{ fontSize: '0.7rem' }}>
-                    Restores default values
                   </div>
                 </div>
               </div>
@@ -1445,39 +1469,6 @@ const PropertyComparison = () => {
             {/* === STEP 3: LOAN CONFIGURATION === */}
             {currentStep === 3 && (
               <div className="animate-fade-in">
-
-                {/* Estimated Possession Timeline */}
-                <div className="mb-4 ps-4 pe-4">
-                  <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                    <i className="bi bi-calendar-date me-2"></i>
-                    Estimated Possession Timeline
-                  </h5>
-                  <div className="row g-3">
-                    <div className="col-md-6">
-                      <label className="form-label">Estimated Possession After (Months)</label>
-                      <div className="input-group">
-                        <input
-                          type="number"
-                          className="form-control"
-                          value={propertyData.assumptions.possessionMonths}
-                          placeholder={placeholders.investmentPeriod}
-                          onChange={(e) => handleAssumptionChange('possessionMonths', e.target.value)}
-                        />
-                        <span className="input-group-text">months</span>
-                      </div>
-                      <small className="text-muted">Time until you get possession of the property</small>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="p-3 bg-light rounded">
-                        <small className="text-muted">Impact on Loans</small>
-                        <div className="fw-bold">
-                          Home Loan EMI: Starts after {propertyData.assumptions.possessionMonths} months
-                        </div>
-                        <small className="text-muted">PL1: Independent • PL2: Starts from possession</small>
-                      </div>
-                    </div>
-                  </div>
-                </div>
 
                 {/* Home Loan Information */}
                 <div className="mb-4 ps-4 pe-4">
@@ -2308,7 +2299,6 @@ const PropertyComparison = () => {
 
   const renderBreakdownTab = () => {
     const breakdown = calculatedData.detailedBreakdown;
-    //const scenario = calculatedData.scenarioBreakdown;
 
     if (!breakdown) {
       return (
@@ -2328,9 +2318,12 @@ const PropertyComparison = () => {
       );
     }
 
+    // ✅ FIX: Wrapped in 'central-container' to limit width and center it
     return (
-      <div className="mb-5">
+      <div className="mb-5 central-container"> 
         <div className="glass-card mb-4">
+          
+          {/* Header */}
           <div className="card-body border-bottom">
             <div className="row align-items-center">
               <div className="col-md-8">
@@ -2353,280 +2346,253 @@ const PropertyComparison = () => {
               </div>
             </div>
           </div>
-          <div className="card-body">
 
-            {/* Monthly EMI Timeline Visualization */}
-            <div className="row mb-4 pt-4 ps-2 pe-2">
-              <div className="col-12">
-                <h5 className="mb-3 ps-4">
-                  <i className="bi bi-calendar-month text-info me-2"></i>
-                  Monthly EMI Timeline
-                </h5>
-                <div className="row g-4 pt-2 ms-2 me-2">
+          <div className="card-body p-4"> {/* Standard Padding */}
 
-                  {/* Timeline 1: Pre-Possession (Total Cost View + Hover Table) */}
-                  {renderTimelineCard(
-                    "Timeline 1: Pre-Possession",    // 1. Title
-                    "bi-calendar-week",              // 2. Icon
-                    "primary",                       // 3. Color
+            {/* 1. Monthly EMI Timeline Visualization */}
+            <div className="section-spacer">
+              <h5 className="mb-3">
+                <i className="bi bi-calendar-month text-info me-2"></i>
+                Monthly EMI Timeline
+              </h5>
+              <div className="row g-4">
 
-                    // 4. MAIN VALUE (The Big Number)
-                    formatCurrency(breakdown.prePossessionTotal),
+                {/* Timeline 1: Pre-Possession */}
+                {renderTimelineCard(
+                  "Timeline 1: Pre-Possession",
+                  "bi-calendar-week", 
+                  "primary",
+                  formatCurrency(breakdown.prePossessionTotal),
+                  `Month 0 to Month ${breakdown.possessionMonths}`,
+                  `${breakdown.prePossessionMonths} months`,
+                  <>
+                    {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 6)}
 
-                    // 5. Period & 6. Duration
-                    `Month 0 to Month ${breakdown.possessionMonths}`,
-                    `${breakdown.prePossessionMonths} months`,
-
-                    // 7. COMPONENT BOXES (With the Popup Logic)
-                    <>
-                      {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 6)}
-
-                      {breakdown.hasIDC && (
-                        <div className="col-6 mb-2">
-                          {/* NAVIGATION BUTTON */}
-                          <div
-                            className="p-2 rounded border text-center h-100 bg-warning bg-opacity-10 text-warning property-card-hover"
-                            style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
-
-                            // --- ON CLICK: NAVIGATE TO NEW PAGE ---
-                            onClick={() => navigate('/schedule', {
-                              state: {
-                                idcSchedule: breakdown.idcSchedule,
-                                pl1EMI: breakdown.personalLoan1EMI,
-                                totalIDC: breakdown.totalIDC,
-                                propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
-                                possessionMonths: breakdown.possessionMonths, // To filter rows
-                                totalPaid: breakdown.prePossessionTotal,
-                                homeLoanAmount: breakdown.homeLoanAmount
-                              }
-                            })}
-                          >
-                            <small className="d-block text-muted opacity-75" style={{ fontSize: '0.7rem' }}>Avg IDC / Month</small>
-                            <div className="fw-bold">{formatCurrency(breakdown.monthlyIDCEMI)}</div>
-
-                            <div className="badge bg-warning text-dark mt-1" style={{ fontSize: '0.6rem' }}>
-                              <i className="bi bi-box-arrow-up-right me-1"></i>
-                              Open Full Schedule
-                            </div>
+                    {breakdown.hasIDC && (
+                      <div className="col-6 mb-2">
+                        <div
+                          className="p-2 rounded border text-center h-100 bg-warning bg-opacity-10 text-warning property-card-hover"
+                          style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
+                          onClick={() => navigate('/schedule', {
+                            state: {
+                              idcSchedule: breakdown.idcSchedule,
+                              pl1EMI: breakdown.personalLoan1EMI,
+                              totalIDC: breakdown.totalIDC,
+                              propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
+                              possessionMonths: breakdown.possessionMonths,
+                              totalPaid: breakdown.prePossessionTotal,
+                              homeLoanAmount: breakdown.homeLoanAmount
+                            }
+                          })}
+                        >
+                          <small className="d-block text-muted opacity-75" style={{ fontSize: '0.7rem' }}>Avg IDC / Month</small>
+                          <div className="fw-bold">{formatCurrency(breakdown.monthlyIDCEMI)}</div>
+                          <div className="badge bg-warning text-dark mt-1" style={{ fontSize: '0.6rem' }}>
+                            <i className="bi bi-box-arrow-up-right me-1"></i>
+                            Open Schedule
                           </div>
                         </div>
-                      )}
-                    </>,
-
-                    // 8. FOOTER TITLE
-                    formatCurrency(breakdown.prePossessionTotal),
-
-                    // 9. FOOTER SUBTEXT (Calc Text)
-                    `Includes ~${formatCurrency(breakdown.totalIDC)} in construction interest`,
-
-                    // 10. SUBTITLE (Under Big Number)
-                    "Total amount paid during construction",
-
-                    // 11. EXTRA HEADER (Null)
-                    null,
-
-                    // 12. EXTRA FOOTER (The hint text)
-                    breakdown.hasIDC && <small className="opacity-75 mt-2 d-block">Click 'View Schedule' to see monthly breakdown</small>
-                  )}
-
-                  {/* Timeline 2: Post-Possession */}
-                  {renderTimelineCard(
-                    "Timeline 2: Post-Possession",
-                    "bi-calendar-check",
-                    "success", // Color Theme
-                    `${formatCurrency(breakdown.postPossessionEMI)}/month`,
-                    `Month ${breakdown.possessionMonths + 1} to Month ${breakdown.totalHoldingMonths}`,
-                    `${breakdown.postPossessionMonths} months`,
-                    // Component Inner JSX
-                    <>
-                      {renderComponentBox("HL EMI", formatCurrency(breakdown.homeLoanEMI), 4)}
-                      {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 4)}
-                      {breakdown.hasPersonalLoan2 &&
-                        renderComponentBox("PL2 EMI", formatCurrency(breakdown.personalLoan2EMI), 4)
-                      }
-                    </>,
-                    formatCurrency(breakdown.postPossessionTotal),
-                    `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`
-                  )}
-
-                </div>
-
-                {/* Summary Card */}
-                <div className="row m-4">
-                  <div className="col-12">
-                    <div className="p-4 bg-info text-white rounded shadow-sm">
-                      <div className="d-flex justify-content-between align-items-center">
-                        <div>
-                          <h6 className="mb-1 fw-bold">Total EMI Commitment</h6>
-                          <small>Combined across both timelines</small>
-                          {breakdown.hasIDC && (
-                            <div className="mt-2 small">
-                              <i className="bi bi-info-circle me-1"></i>
-                              Includes Monthly IDC ({formatCurrency(breakdown.monthlyIDCEMI)})
-                            </div>
-                          )}
-                        </div>
-                        <div className="text-end">
-                          <div className="fw-bold fs-3">{formatCurrency(breakdown.totalEMIPaid)}</div>
-                          <small>Pre: {formatCurrency(breakdown.prePossessionTotal)} + Post: {formatCurrency(breakdown.postPossessionTotal)}</small>
-                        </div>
                       </div>
-                    </div>
-                  </div>
-                </div>
+                    )}
+                  </>,
+                  formatCurrency(breakdown.prePossessionTotal),
+                  `Includes ~${formatCurrency(breakdown.totalIDC)} in construction interest`,
+                  "Total amount paid during construction",
+                  null,
+                  breakdown.hasIDC && <small className="opacity-75 mt-2 d-block">Click 'View Schedule' to see monthly breakdown</small>
+                )}
+
+                {/* Timeline 2: Post-Possession */}
+                {renderTimelineCard(
+                  "Timeline 2: Post-Possession",
+                  "bi-calendar-check",
+                  "success",
+                  `${formatCurrency(breakdown.postPossessionEMI)}/month`,
+                  `Month ${breakdown.possessionMonths + 1} to Month ${breakdown.totalHoldingMonths}`,
+                  `${breakdown.postPossessionMonths} months`,
+                  <>
+                    {renderComponentBox("HL EMI", formatCurrency(breakdown.homeLoanEMI), 4)}
+                    {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 4)}
+                    {breakdown.hasPersonalLoan2 &&
+                      renderComponentBox("PL2 EMI", formatCurrency(breakdown.personalLoan2EMI), 4)
+                    }
+                  </>,
+                  formatCurrency(breakdown.postPossessionTotal),
+                  `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`
+                )}
               </div>
-            </div>
 
-            {/* Interest During Construction (IDC) Details */}
-            {breakdown.hasIDC && (
-              <div className="row mb-4 ps-3 pe-3">
-                <div className="col-12">
-                  <h5 className="mb-3">
-                    <i className="bi bi-calculator text-warning me-2"></i>
-                    Interest During Construction (IDC)
-                  </h5>
-                  <div className="row g-3">
-                    {renderStatCard("Monthly IDC EMI", formatCurrency(breakdown.monthlyIDCEMI), "Interest during construction", "warning", 4)}
-                    {renderStatCard("Total IDC Amount", formatCurrency(breakdown.totalIDC), `Accumulated over ${breakdown.constructionMonths} months`, "danger", 4)}
-                    {renderStatCard("Home Loan with IDC", formatCurrency(breakdown.totalHomeLoanAtCompletion), "Principal + Total IDC", "info", 4)}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Home Loan Detailed Analysis */}
-            <div className="row m-4">
-              <div className="col-12">
-                <h5 className="mb-3">
-                  <i className="bi bi-bank text-primary me-2"></i>
-                  Home Loan Analysis
-                  {breakdown.hasIDC && (
-                    <span className="badge bg-warning ms-2">Includes IDC</span>
-                  )}
-                </h5>
-                <div className="row g-3">
-                  <div className="col-md-3">
-                    <div className="p-3 bg-primary text-white rounded text-center">
-                      <small className="text-white">Total EMI per Month</small>
-                      <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanEMI)}</div>
-                      <small className="text-white">Monthly payment</small>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="p-3 bg-success text-white rounded text-center">
-                      <small className="text-white">Total EMI Paid</small>
-                      <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanEMIPaid)}</div>
-                      <small className="text-white">{breakdown.homeLoanPaymentsMade} payments made</small>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="p-3 bg-warning text-white rounded text-center">
-                      <small className="text-white">Total Interest Paid</small>
-                      <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanInterestPaid)}</div>
-                      <small className="text-white">Over {breakdown.homeLoanPaymentsMade} months</small>
-                    </div>
-                  </div>
-                  <div className="col-md-3">
-                    <div className="p-3 bg-danger text-white rounded text-center">
-                      <small className="text-white">Total EMI Due</small>
-                      <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanOutstanding)}</div>
-                      <small className="text-white">Outstanding balance</small>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Personal Loan 1 Detailed Analysis */}
-            {breakdown.hasPersonalLoan1 && renderLoanSection("Personal Loan 1 Analysis", "bi-cash-coin", "success",
-              formatCurrency(breakdown.personalLoan1EMI),
-              formatCurrency(breakdown.personalLoan1EMIPaid),
-              formatCurrency(breakdown.personalLoan1InterestPaid),
-              formatCurrency(breakdown.personalLoan1Outstanding),
-              breakdown.pl1PaymentsMade
-            )}
-
-            {/* Personal Loan 2 Detailed Analysis */}
-            {breakdown.hasPersonalLoan2 && renderLoanSection("Personal Loan 2 Analysis", "bi-cash-coin", "warning",
-              formatCurrency(breakdown.personalLoan2EMI),
-              formatCurrency(breakdown.personalLoan2EMIPaid),
-              formatCurrency(breakdown.personalLoan2InterestPaid),
-              formatCurrency(breakdown.personalLoan2Outstanding),
-              breakdown.pl2PaymentsMade
-            )}
-
-            {/* Total Loan Summary */}
-            <div className="row m-4">
-              <div className="col-12">
-                <h5 className="mb-3"><i className="bi bi-calculator text-info me-2"></i>Total Loan Summary</h5>
-                <div className="row g-3">
-                  {renderStatCard("Total Monthly EMI", formatCurrency(breakdown.homeLoanEMI + breakdown.personalLoan1EMI + breakdown.personalLoan2EMI), "Combined monthly payment", "info", 4)}
-                  {renderStatCard("Total EMI Paid", formatCurrency(breakdown.totalEMIPaid), `Over ${breakdown.years} years`, "success", 4)}
-                  {renderStatCard("Total Outstanding", formatCurrency(breakdown.totalLoanOutstanding), "Total balance due", "danger", 4)}
-                </div>
-              </div>
-            </div>
-
-            {/* Interest Summary */}
-            <div className="row m-4">
-              <div className="col-12">
-                <h5 className="mb-3">
-                  <i className="bi bi-percent text-warning me-2"></i>
-                  Total Interest Summary
-                </h5>
-                <div className="p-3 bg-warning text-white rounded">
+              {/* Summary Card - Removed 'm-4', replaced with standard spacing */}
+              <div className="mt-4">
+                <div className="p-4 bg-info text-white rounded shadow-sm">
                   <div className="d-flex justify-content-between align-items-center">
                     <div>
-                      <h3 className="fw-bold mb-1">
-                        {formatLakhs(breakdown.totalInterestPaid)}
-                      </h3>
-                      <small>Total Interest Paid ({breakdown.years} years)</small>
+                      <h6 className="mb-1 fw-bold">Total EMI Commitment</h6>
+                      <small>Combined across both timelines</small>
                       {breakdown.hasIDC && (
-                        <div className="mt-2">
-                          <small className="text-white opacity-15">
-                            <i className="bi bi-calculator me-1"></i>
-                            Includes {formatLakhs(breakdown.totalIDC)} IDC
-                          </small>
+                        <div className="mt-2 small">
+                          <i className="bi bi-info-circle me-1"></i>
+                          Includes Monthly IDC ({formatCurrency(breakdown.monthlyIDCEMI)})
                         </div>
                       )}
                     </div>
                     <div className="text-end">
-                      {breakdown.hasIDC && (
-                        <div className="badge bg-warning shadow-sm" style={{ color: '#333' }}>
-                          IDC: {formatLakhs(breakdown.totalIDC)}
-                        </div>
-                      )}
+                      <div className="fw-bold fs-3">{formatCurrency(breakdown.totalEMIPaid)}</div>
+                      <small>Pre: {formatCurrency(breakdown.prePossessionTotal)} + Post: {formatCurrency(breakdown.postPossessionTotal)}</small>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Sale Analysis */}
-            <div className="row m-4">
-              <div className="col-12">
+            {/* 2. Interest During Construction (IDC) Details */}
+            {breakdown.hasIDC && (
+              <div className="section-spacer">
                 <h5 className="mb-3">
-                  <i className="bi bi-graph-up text-success me-2"></i>
-                  Sale Analysis at ₹{breakdown.exitPrice}/sq.ft
+                  <i className="bi bi-calculator text-warning me-2"></i>
+                  Interest During Construction (IDC)
                 </h5>
-                <div className="p-3 bg-success text-white rounded">
-                  <div className="d-flex justify-content-between align-items-center">
-                    <div>
-                      <h4 className="fw-bold mb-1">
-                        Leftover Cash after {breakdown.years} years
-                      </h4>
-                      <small>After repaying all debt</small>
-                    </div>
-                    <div className="fs-2 fw-bold">
-                      {formatLakhs(breakdown.leftoverCash)}
-                    </div>
+                <div className="row g-3">
+                  {renderStatCard("Monthly IDC EMI", formatCurrency(breakdown.monthlyIDCEMI), "Interest during construction", "warning", 4)}
+                  {renderStatCard("Total IDC Amount", formatCurrency(breakdown.totalIDC), `Accumulated over ${breakdown.constructionMonths} months`, "danger", 4)}
+                  {renderStatCard("Home Loan with IDC", formatCurrency(breakdown.totalHomeLoanAtCompletion), "Principal + Total IDC", "info", 4)}
+                </div>
+              </div>
+            )}
+
+            {/* 3. Home Loan Detailed Analysis */}
+            <div className="section-spacer">
+              <h5 className="mb-3">
+                <i className="bi bi-bank text-primary me-2"></i>
+                Home Loan Analysis
+                {breakdown.hasIDC && (
+                  <span className="badge bg-warning ms-2">Includes IDC</span>
+                )}
+              </h5>
+              <div className="row g-3">
+                <div className="col-md-3">
+                  <div className="p-3 bg-primary text-white rounded text-center h-100">
+                    <small className="text-white">Total EMI per Month</small>
+                    <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanEMI)}</div>
+                    <small className="text-white">Monthly payment</small>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="p-3 bg-success text-white rounded text-center h-100">
+                    <small className="text-white">Total EMI Paid</small>
+                    <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanEMIPaid)}</div>
+                    <small className="text-white">{breakdown.homeLoanPaymentsMade} payments made</small>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="p-3 bg-warning text-white rounded text-center h-100">
+                    <small className="text-white">Total Interest Paid</small>
+                    <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanInterestPaid)}</div>
+                    <small className="text-white">Over {breakdown.homeLoanPaymentsMade} months</small>
+                  </div>
+                </div>
+                <div className="col-md-3">
+                  <div className="p-3 bg-danger text-white rounded text-center h-100">
+                    <small className="text-white">Total EMI Due</small>
+                    <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanOutstanding)}</div>
+                    <small className="text-white">Outstanding balance</small>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Net Position */}
-            <div className="m-4"> {/* ⬅️ Added wrapper for margin */}
+            {/* 4. Personal Loan 1 Analysis */}
+            {breakdown.hasPersonalLoan1 && (
+              <div className="section-spacer">
+                {renderLoanSection("Personal Loan 1 Analysis", "bi-cash-coin", "success",
+                  formatCurrency(breakdown.personalLoan1EMI),
+                  formatCurrency(breakdown.personalLoan1EMIPaid),
+                  formatCurrency(breakdown.personalLoan1InterestPaid),
+                  formatCurrency(breakdown.personalLoan1Outstanding),
+                  breakdown.pl1PaymentsMade
+                )}
+              </div>
+            )}
+
+            {/* 5. Personal Loan 2 Analysis */}
+            {breakdown.hasPersonalLoan2 && (
+              <div className="section-spacer">
+                {renderLoanSection("Personal Loan 2 Analysis", "bi-cash-coin", "warning",
+                  formatCurrency(breakdown.personalLoan2EMI),
+                  formatCurrency(breakdown.personalLoan2EMIPaid),
+                  formatCurrency(breakdown.personalLoan2InterestPaid),
+                  formatCurrency(breakdown.personalLoan2Outstanding),
+                  breakdown.pl2PaymentsMade
+                )}
+              </div>
+            )}
+
+            {/* 6. Total Loan Summary */}
+            <div className="section-spacer">
+              <h5 className="mb-3"><i className="bi bi-calculator text-info me-2"></i>Total Loan Summary</h5>
+              <div className="row g-3">
+                {renderStatCard("Total Monthly EMI", formatCurrency(breakdown.homeLoanEMI + breakdown.personalLoan1EMI + breakdown.personalLoan2EMI), "Combined monthly payment", "info", 4)}
+                {renderStatCard("Total EMI Paid", formatCurrency(breakdown.totalEMIPaid), `Over ${breakdown.years} years`, "success", 4)}
+                {renderStatCard("Total Outstanding", formatCurrency(breakdown.totalLoanOutstanding), "Total balance due", "danger", 4)}
+              </div>
+            </div>
+
+            {/* 7. Interest Summary */}
+            <div className="section-spacer">
+              <h5 className="mb-3">
+                <i className="bi bi-percent text-warning me-2"></i>
+                Total Interest Summary
+              </h5>
+              <div className="p-3 bg-warning text-white rounded">
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h3 className="fw-bold mb-1">
+                      {formatLakhs(breakdown.totalInterestPaid)}
+                    </h3>
+                    <small>Total Interest Paid ({breakdown.years} years)</small>
+                    {breakdown.hasIDC && (
+                      <div className="mt-2">
+                        <small className="text-white opacity-15">
+                          <i className="bi bi-calculator me-1"></i>
+                          Includes {formatLakhs(breakdown.totalIDC)} IDC
+                        </small>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-end">
+                    {breakdown.hasIDC && (
+                      <div className="badge bg-warning shadow-sm" style={{ color: '#333' }}>
+                        IDC: {formatLakhs(breakdown.totalIDC)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 8. Sale Analysis */}
+            <div className="section-spacer">
+              <h5 className="mb-3">
+                <i className="bi bi-graph-up text-success me-2"></i>
+                Sale Analysis at ₹{breakdown.exitPrice}/sq.ft
+              </h5>
+              <div className="p-3 bg-success text-white rounded">
+                <div className="d-flex justify-content-between align-items-center">
+                  <div>
+                    <h4 className="fw-bold mb-1">
+                      Leftover Cash after {breakdown.years} years
+                    </h4>
+                    <small>After repaying all debt</small>
+                  </div>
+                  <div className="fs-2 fw-bold">
+                    {formatLakhs(breakdown.leftoverCash)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 9. Net Position Banner */}
+            <div className="section-spacer"> 
               {renderBanner(
                 "Net Position Analysis",
                 formatLakhs(Math.abs(breakdown.netGainLoss)),
@@ -2637,60 +2603,59 @@ const PropertyComparison = () => {
               )}
             </div>
 
-            {/* Multiple Exit Price Scenarios */}
-            <div className="row m-4">
-              <div className="col-12">
-                <div className="p-3 bg-light rounded">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h6 className="mb-0">
-                      <i className="bi bi-bar-chart me-2"></i>
-                      Multiple Exit Price Scenarios
-                    </h6>
-                    <span className="badge bg-primary">
-                      {calculatedData.multipleScenarios?.length || 0} scenarios
-                    </span>
-                  </div>
-                  <div className="table-responsive">
-                    <table className="table table-bordered table-hover">
-                      <thead>
-                        <tr>
-                          <th>Scenario</th>
-                          <th>Exit Price (₹/sq.ft)</th>
-                          <th>Sale Value</th>
-                          <th>Leftover Cash</th>
-                          <th>Net Profit/Loss</th>
-                          <th>ROI</th>
+            {/* 10. Multiple Exit Scenarios */}
+            <div className="section-spacer">
+              <div className="p-3 bg-light rounded">
+                <div className="d-flex justify-content-between align-items-center mb-3">
+                  <h6 className="mb-0">
+                    <i className="bi bi-bar-chart me-2"></i>
+                    Multiple Exit Price Scenarios
+                  </h6>
+                  <span className="badge bg-primary">
+                    {calculatedData.multipleScenarios?.length || 0} scenarios
+                  </span>
+                </div>
+                <div className="table-responsive">
+                  <table className="table table-bordered table-hover mb-0">
+                    <thead>
+                      <tr>
+                        <th>Scenario</th>
+                        <th>Exit Price (₹/sq.ft)</th>
+                        <th>Sale Value</th>
+                        <th>Leftover Cash</th>
+                        <th>Net Profit/Loss</th>
+                        <th>ROI</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {calculatedData.multipleScenarios?.map((scenario, index) => (
+                        <tr key={index} className={scenario.exitPrice === userSelections.selectedExitPrice ? 'table-primary' : ''}>
+                          <td>Scenario {index + 1}</td>
+                          <td>
+                            <strong>₹{scenario.exitPrice}</strong>
+                            {scenario.exitPrice === userSelections.selectedExitPrice && (
+                              <span className="badge bg-primary ms-2">Selected</span>
+                            )}
+                          </td>
+                          <td>{formatLakhs(scenario.saleValue)}</td>
+                          <td className={scenario.leftoverCash >= 0 ? 'text-success' : 'text-danger'}>
+                            {formatLakhs(scenario.leftoverCash)}
+                          </td>
+                          <td className={scenario.netProfit >= 0 ? 'text-success' : 'text-danger'}>
+                            {formatLakhs(scenario.netProfit)}
+                          </td>
+                          <td className={scenario.roi >= 0 ? 'text-success' : 'text-danger'}>
+                            {formatPercent(scenario.roi)}
+                          </td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {calculatedData.multipleScenarios?.map((scenario, index) => (
-                          <tr key={index} className={scenario.exitPrice === userSelections.selectedExitPrice ? 'table-primary' : ''}>
-                            <td>Scenario {index + 1}</td>
-                            <td>
-                              <strong>₹{scenario.exitPrice}</strong>
-                              {scenario.exitPrice === userSelections.selectedExitPrice && (
-                                <span className="badge bg-primary ms-2">Selected</span>
-                              )}
-                            </td>
-                            <td>{formatLakhs(scenario.saleValue)}</td>
-                            <td className={scenario.leftoverCash >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(scenario.leftoverCash)}
-                            </td>
-                            <td className={scenario.netProfit >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatLakhs(scenario.netProfit)}
-                            </td>
-                            <td className={scenario.roi >= 0 ? 'text-success' : 'text-danger'}>
-                              {formatPercent(scenario.roi)}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
-          </div>
+
+          </div> {/* End Card Body */}
         </div>
       </div>
     );
@@ -2724,7 +2689,14 @@ const PropertyComparison = () => {
 
             {/* Main Header Text */}
             <div className="text-center mb-4 pt-3">
-              <p className="lead text-light opacity-90 mb-4" style={{ letterSpacing: '0.5px' }}>
+              {/* ✅ CHANGED: Replaced 'text-light' with 'text-secondary' */}
+              <p
+                className="lead opacity-90 mb-4"
+                style={{
+                  letterSpacing: '0.5px',
+                  color: 'var(--text-primary)' // Automatically switches: Black in Light Mode, White in Dark Mode
+                }}
+              >
                 Model your payment plan, optimize loans, and forecast returns.
               </p>
             </div>

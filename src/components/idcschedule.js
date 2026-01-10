@@ -17,6 +17,12 @@ const IdcSchedulePage = () => {
   const formatCurrency = (value) =>
     (!value && value !== 0) ? '₹0' : `₹${Math.round(value).toLocaleString()}`;
 
+  const getOrdinal = (n) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
   if (!idcSchedule) {
     return (
       <div className="container py-5 text-center">
@@ -28,119 +34,103 @@ const IdcSchedulePage = () => {
     );
   }
 
-  // 2. Filter Schedule
-  const filteredSchedule = possessionMonths
-    ? idcSchedule.filter(row => row.releaseMonth <= possessionMonths)
-    : idcSchedule;
-
-  // 3. Totals Logic (The Corrected Version)
+  // ==========================================
+  // ⚙️ LOGIC: CONVERT SLABS TO PERIODS
+  // ==========================================
   
-  // ✅ FIX 1: Total Interest is simply the sum of all "Lifetime Costs"
-  const totalLifetimeCost = filteredSchedule.reduce((acc, row) => acc + (row.interestCost || 0), 0);
-  const calculatedTotalInterest = totalLifetimeCost;
-
-  // ✅ FIX 2: Total Amount Paid = Total Interest + (PL1 EMI * Total Months)
-  // We use the actual filtered length or possessionMonths to ensure accuracy
-  const totalMonthsCount = filteredSchedule[filteredSchedule.length - 1]?.releaseMonth || 0;
-  const tableTotal = calculatedTotalInterest + (pl1EMI * totalMonthsCount);
-  const displayTotal = tableTotal;
-
-
-  // 4. Min & Max EMI
-  const monthlyOutflows = filteredSchedule.map(row =>
-    (row.currentTotalMonthlyEMI || row.currentMonthlyIDC) + pl1EMI
-  );
-
-  const minEMI = monthlyOutflows.length > 0 ? Math.min(...monthlyOutflows) : 0;
-  const maxEMI = monthlyOutflows.length > 0 ? Math.max(...monthlyOutflows) : 0;
-
-  // 5. Calculate Slab Principal Amount
-  const totalSlabs = idcSchedule.length; 
-  const slabPrincipalAmount = totalSlabs > 0 ? homeLoanAmount / totalSlabs : 0;
-  
+  const processedRows = [];
+  const slabPrincipalAmount = idcSchedule.length > 0 ? homeLoanAmount / idcSchedule.length : 0;
   let runningPrincipal = 0;
 
-  // --- STYLES ---
-  const styles = {
-    tableContainer: {
-      background: '#1e1e24',
-      borderRadius: '12px',
-      border: '1px solid rgba(255, 255, 255, 0.2)',
-      overflow: 'hidden',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.3)'
-    },
-    headerTitle: {
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      padding: '15px 20px',
-      color: 'white',
-      fontWeight: '600',
-      fontSize: '1rem',
-      display: 'flex',
-      alignItems: 'center'
-    },
-    table: {
-      width: '100%',
-      fontSize: '0.9rem',
-      color: '#ddd',
-      borderCollapse: 'collapse',
-    },
-    th: {
-      background: '#2b2b35',
-      padding: '12px 15px',
-      fontSize: '0.8rem',
-      color: '#aaa',
-      textTransform: 'uppercase',
-      letterSpacing: '0.5px',
-      borderBottom: '1px solid rgba(255,255,255,0.1)',
-      textAlign: 'left'
-    },
-    td: {
-      padding: '12px 15px',
-      borderBottom: '1px solid rgba(255,255,255,0.05)',
-      verticalAlign: 'middle'
-    },
-    tfoot: {
-      background: '#2b2b35',
-      borderTop: '2px solid rgba(255,255,255,0.1)'
-    },
-    footerCell: {
-      padding: '15px',
-      color: 'white',
-      fontWeight: 'bold',
-      fontSize: '1rem',
-      textAlign: 'right'
-    }
-  };
+  // 1. Handle "No Disbursement" Gap
+  if (idcSchedule.length > 0 && idcSchedule[0].releaseMonth > 1) {
+    const endGap = idcSchedule[0].releaseMonth - 1;
+    
+    // For gap months, you only pay PL1 (no IDC yet)
+    const monthlyPay = pl1EMI; 
+
+    processedRows.push({
+      isGap: true, 
+      period: endGap === 1 ? "Month 1" : `Months 1 - ${endGap}`,
+      activity: "No Disbursement",
+      loanReleased: 0,
+      monthlyInterest: 0,
+      monthlyOutflow: monthlyPay, 
+      duration: endGap,
+      totalInterestCost: 0,
+      // ✅ FIX: Row shows Monthly amount (PL1 + 0), NOT multiplied by duration
+      displayOutflow: monthlyPay 
+    });
+  }
+
+  // 2. Process Actual Slabs
+  idcSchedule.forEach((slab, index) => {
+    const startMonth = slab.releaseMonth;
+    const isLastSlab = index === idcSchedule.length - 1;
+    
+    const nextStartMonth = isLastSlab 
+        ? possessionMonths + 1 
+        : idcSchedule[index + 1].releaseMonth;
+        
+    const endMonth = nextStartMonth - 1;
+    const duration = Math.max(1, (endMonth - startMonth) + 1);
+
+    runningPrincipal += slabPrincipalAmount;
+
+    // Financials
+    const monthlyInterest = slab.currentTotalMonthlyEMI || slab.currentMonthlyIDC;
+    
+    // ✅ FIX: The monthly check you write = IDC + PL1
+    const monthlyPay = monthlyInterest + pl1EMI; 
+
+    processedRows.push({
+      isGap: false,
+      period: startMonth === endMonth ? `Month ${startMonth}` : `Months ${startMonth} - ${endMonth}`,
+      activity: isLastSlab ? "Final Disbursement" : `${getOrdinal(index + 1)} Disbursement`,
+      loanReleased: runningPrincipal,
+      monthlyInterest: monthlyInterest,
+      monthlyOutflow: monthlyPay,
+      duration: duration,
+      totalInterestCost: monthlyInterest * duration, // For footer calc only
+      displayOutflow: monthlyPay // ✅ FIX: Just the monthly amount
+    });
+  });
+
+  // 3. Grand Totals (Calculated accurately using Duration)
+  const grandTotalInterest = processedRows.reduce((acc, row) => acc + (row.monthlyInterest * row.duration), 0);
+  const grandTotalPaid = processedRows.reduce((acc, row) => acc + (row.monthlyOutflow * row.duration), 0);
+
+  // 4. Min/Max for cards
+  const monthlyOutflows = processedRows.map(r => r.monthlyOutflow);
+  const minEMI = Math.min(...monthlyOutflows);
+  const maxEMI = Math.max(...monthlyOutflows);
+
 
   return (
     <div className="property-comparison" style={{ minHeight: '100vh', position: 'relative' }}>
 
-      {/* Background Blobs */}
-      <div className="position-fixed top-0 left-0 w-100 h-100" style={{ zIndex: 0, pointerEvents: 'none' }}>
-        <div className="position-absolute top-0 start-0 w-100 h-100" style={{ background: 'radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.15) 0%, transparent 50%)' }}></div>
-        <div className="position-absolute top-0 end-0 w-100 h-100" style={{ background: 'radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%)' }}></div>
-      </div>
+      {/* Background Handler */}
+      <div className="page-background-handler"></div>
 
-      <div className="container py-5" style={{ position: 'relative', zIndex: 1 }}>
+      <div className="container py-5 central-container" style={{ position: 'relative', zIndex: 1 }}>
 
         {/* Header */}
         <div className="d-flex justify-content-between align-items-center mb-5">
           <div>
-            <h2 className="fw-bold mb-1 text-white" style={{ textShadow: '0 2px 4px rgba(0,0,0,0.3)' }}>
+            <h2 className="fw-bold mb-1" style={{ color: 'var(--text-primary)' }}>
               <i className="bi bi-calendar-week me-3"></i>Construction Schedule
             </h2>
-            <p className="text-white-50 mb-0">
+            <p className="mb-0" style={{ color: 'var(--text-secondary)' }}>
               Breakdown up to Possession (Month {possessionMonths})
             </p>
           </div>
-          <button className="btn btn-outline-light rounded-pill px-4" onClick={() => navigate(-1)}>
+          <button className="btn btn-outline-primary rounded-pill px-4 shadow-sm" onClick={() => navigate(-1)}>
             <i className="bi bi-arrow-left me-2"></i> Back to Dashboard
           </button>
         </div>
 
         {/* --- CARDS LAYOUT --- */}
         <div className="glass-card row g-4 mb-5">
-          {/* ... (Cards remain unchanged) ... */}
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-warning">
               <div className="d-flex align-items-center">
@@ -149,7 +139,7 @@ const IdcSchedulePage = () => {
                 </div>
                 <div>
                   <small className="text-uppercase fw-bold opacity-75">Total Interest Cost</small>
-                  <h3 className="fw-bold mt-1 mb-0">{formatCurrency(calculatedTotalInterest)}</h3>
+                  <h3 className="fw-bold mt-1 mb-0">{formatCurrency(grandTotalInterest)}</h3>
                 </div>
               </div>
             </div>
@@ -196,108 +186,98 @@ const IdcSchedulePage = () => {
           </div>
         </div>
 
-        {/* TABLE */}
-        <div style={styles.tableContainer}>
-          <div style={styles.headerTitle}>
-            <i className="bi bi-table me-2"></i> Payment Schedule
+        {/* ✅ THEMED TABLE */}
+        <div className="schedule-container">
+          <div className="schedule-header">
+            <i className="bi bi-table me-2"></i> Period-wise Payment Breakdown
           </div>
 
           <div className="table-responsive">
-            <table style={styles.table}>
+            <table className="schedule-table">
               <thead>
                 <tr>
-                  <th style={{ ...styles.th, width: '5%' }}>Slab</th>
-                  <th style={{ ...styles.th, width: '20%' }}>Release Month</th>
-                  <th style={{ ...styles.th, width: '20%', color: '#0dcaf0' }}>Cumulative Disbursement</th>
-                  <th style={{ ...styles.th, width: '15%', textAlign: 'right' }}>IDC Interest</th>
-                  <th style={{ ...styles.th, width: '25%', textAlign: 'right', color: '#fff' }}>Total Monthly Outflow</th>
-                  <th style={{ ...styles.th, width: '15%', textAlign: 'right', color: '#adb5bd' }}>Lifetime Cost</th>
+                  <th style={{ width: '15%' }}>Period</th>
+                  <th style={{ width: '20%' }}>Activity</th>
+                  <th style={{ width: '15%', color: '#0dcaf0' }}>Loan Released</th>
+                  <th style={{ width: '15%', textAlign: 'right' }}>Monthly Interest</th>
+                  <th style={{ width: '10%', textAlign: 'center' }}>Duration</th>
+                  <th style={{ width: '15%', textAlign: 'right', color: 'var(--text-secondary)' }}>Total Interest</th>
+                  
+                  {/* ✅ Renamed Header to be clear it is Monthly */}
+                  <th style={{ width: '15%', textAlign: 'right', color: 'var(--brand-color)' }}>Monthly Outflow</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredSchedule.map((row, idx) => {
-                  
-                  const monthlyOutflow = (row.currentTotalMonthlyEMI || row.currentMonthlyIDC) + pl1EMI;
-                  runningPrincipal += slabPrincipalAmount;
+                {processedRows.map((row, idx) => (
+                  <tr key={idx}>
+                    {/* Period */}
+                    <td>
+                        <span className={`badge ${row.isGap ? 'bg-secondary' : 'bg-secondary'} bg-opacity-10 border px-3 py-2 rounded-pill`} 
+                              style={{color: row.isGap ? 'var(--text-secondary)' : 'var(--brand-color)', fontSize: '0.85rem'}}>
+                            {row.period}
+                        </span>
+                    </td>
 
-                  // ✅ NEW: Check if this is the last row to show the badge
-                  const isLastRow = idx === filteredSchedule.length - 1;
+                    <td style={{ fontWeight: '500', color: 'var(--text-secondary)' }}>
+                        {row.activity}
+                    </td>
+                    
+                    <td style={{ color: '#0dcaf0', fontWeight: '500' }}>
+                       {formatCurrency(row.loanReleased)}
+                    </td>
 
-                  return (
-                    <tr key={idx}>
-                      <td style={{ ...styles.td, color: '#6c757d', fontWeight: 'bold' }}>#{row.slabNo}</td>
-                      
-                      <td style={styles.td}>
-                        <span className="badge bg-secondary bg-opacity-25 text-light border border-secondary border-opacity-25 px-2 py-1">Month {row.releaseMonth}</span>
-                        {/* Only show time remaining if it's NOT the last row (possession) */}
-                        {!isLastRow && row.timeRemaining > 0 && <small className="ms-2 text-white-50">({row.timeRemaining} m left)</small>}
-                      </td>
-                      
-                      <td style={{ ...styles.td, color: '#0dcaf0', fontWeight: '500' }}>
-                         {formatCurrency(runningPrincipal)}
-                         <div style={{ fontSize: '0.7em', color: '#666' }}>Bank to Builder</div>
-                      </td>
+                    <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                      {formatCurrency(row.monthlyInterest)}
+                    </td>
 
-                      <td style={{ ...styles.td, textAlign: 'right', color: '#aaa' }}>
-                        {formatCurrency(row.currentTotalMonthlyEMI || row.currentMonthlyIDC)}
-                      </td>
+                    <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--text-primary)' }}>
+                      {row.duration} <small className="text-muted fw-normal">mo</small>
+                    </td>
 
-                      {/* ✅ BADGE IMPLEMENTATION HERE */}
-                      <td style={{ ...styles.td, textAlign: 'right', fontWeight: 'bold', color: '#667eea', background: 'rgba(102, 126, 234, 0.05)' }}>
-                        <div className="d-flex align-items-center justify-content-end gap-2">
-                            {formatCurrency(monthlyOutflow)}
-                            {isLastRow && (
-                                <span className="badge bg-success bg-opacity-75 text-white" style={{ fontSize: '0.65rem' }}>
-                                    Possession
-                                </span>
-                            )}
-                        </div>
-                        <div style={{ fontSize: '0.7em', color: '#666', fontWeight: 'normal' }}>IDC + PL1</div>
-                      </td>
+                    <td style={{ textAlign: 'right', color: 'var(--text-secondary)' }}>
+                      {formatCurrency(row.totalInterestCost)}
+                    </td>
 
-                      <td style={{ ...styles.td, textAlign: 'right', color: '#adb5bd', fontStyle: 'italic' }}>
-                        {formatCurrency(row.interestCost)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                    {/* ✅ FIX: Shows Monthly Amount (PL1 + Interest) */}
+                    <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--brand-color)', background: 'rgba(102, 126, 234, 0.05)' }}>
+                      {formatCurrency(row.displayOutflow)}
+                    </td>
+                  </tr>
+                ))}
               </tbody>
 
-              {/* --- FOOTER (TOTALS) --- */}
-              <tfoot style={styles.tfoot}>
+              <tfoot className="schedule-tfoot">
                 <tr>
-                  <td colSpan="3" style={styles.footerCell}>
-                    <span className="text-white-50 small text-uppercase" style={{ letterSpacing: '1px' }}>Grand Totals</span>
+                  <td colSpan="5" className="schedule-footer-cell" style={{ textAlign: 'right' }}>
+                    <span className="small text-uppercase opacity-75" style={{ letterSpacing: '1px' }}>Grand Totals</span>
                   </td>
 
-                  <td style={{ ...styles.footerCell, color: '#ffc107' }}>
-                     {formatCurrency(calculatedTotalInterest)}
-                     <div style={{ fontSize: '0.6em', color: '#aaa', fontWeight: 'normal' }}>TOTAL INTEREST</div>
+                  <td className="schedule-footer-cell" style={{ color: '#08b69fff' }}>
+                     {formatCurrency(grandTotalInterest)}
+                     <div style={{ fontSize: '0.5em', opacity: 0.7, fontWeight: 'normal' }}>TOTAL INTEREST</div>
                   </td>
 
-                  <td style={{ ...styles.footerCell, color: '#667eea', borderTop: '2px solid rgba(102, 126, 234, 0.3)' }}>
-                    {formatCurrency(displayTotal)}
-                    <div style={{ fontSize: '0.6em', color: '#aaa', fontWeight: 'normal' }}>TOTAL AMOUNT PAID</div>
+                  {/* Grand Total Paid still sums up everything (Monthly * Duration) */}
+                  <td className="schedule-footer-cell" style={{ color: 'var(--brand-color)', fontSize: '1.1rem' }}>
+                     {formatCurrency(grandTotalPaid)}
+                     <div style={{ fontSize: '0.5em', opacity: 0.7, fontWeight: 'normal' }}>LIFETIME PAID</div>
                   </td>
-                  
-                  <td style={{ ...styles.footerCell, color: '#adb5bd' }}>
-                     {formatCurrency(totalLifetimeCost)}
-                  </td>
-
                 </tr>
               </tfoot>
 
             </table>
           </div>
-          
         </div>
+
+        {/* Important Note */}
         <div className="mt-4 p-3 rounded d-flex align-items-start" style={{ background: 'rgba(13, 202, 240, 0.1)', borderLeft: '4px solid #0dcaf0' }}>
           <i className="bi bi-info-circle-fill text-info me-3 mt-1 fs-5"></i>
           <div>
-            <h6 className="text-white mb-1 fw-bold">Important Note</h6>
-            <p className="text-white mb-0 small">
-              The payment shown for the <strong>Possession Month</strong> is a one-time charge for that specific month. 
-              After this payment is made, the pre-EMI/Construction phase concludes, and your regular <strong>Home Loan EMI</strong> (Principal + Interest) will begin from the following month.
+            <h6 className="mb-1 fw-bold" style={{ color: 'var(--text-primary)' }}>Understanding this Table</h6>
+            <p className="mb-0 small" style={{ color: 'var(--text-secondary)' }}>
+              <strong>Monthly Outflow</strong> shows the actual amount you pay <i>per month</i> during that specific period (PL1 EMI + Current Interest).
+              <br/>
+              The "Grand Total" at the bottom sums up all payments made over the entire {possessionMonths} months construction period.
             </p>
           </div>
         </div>

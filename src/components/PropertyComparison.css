@@ -2,32 +2,42 @@
    1. CSS VARIABLES (THEMING ENGINE)
    ========================================= */
 :root {
-    --main-bg-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    --input-bg: rgba(255, 255, 255, 0.8);
-    /* Semi-transparent inputs */
-    --text-primary: #212529;
-    --text-secondary: #6c757d;
-    --border-color: #ced4da;
-    --highlight-blue: #0d6efd;
+    /* ✅ MATCHED FROM APP.CSS: Steel Blue -> Midnight Blue Gradient */
+    --main-bg-gradient: linear-gradient(135deg,#2c3e50bd 0%, #4a6fa5 100% );
+    
+    /* ✅ CONSTANT HIGHLIGHT COLOR: The "Steel Blue" from your App Header */
+    --brand-color: #4a6fa5; 
 
-    /* LIGHT MODE GLASS SETTINGS (Updated for better transparency) */
-    --glass-bg: rgba(255, 255, 255, 0.6);
-    --glass-border: rgba(255, 255, 255, 0.4);
-    --glass-shadow: rgba(31, 38, 135, 0.1);
+    /* Inputs */
+    --input-bg: #FFFFFF; 
+    
+    /* Text Colors */
+    --text-primary: #1e293b;   /* Slate-900 */
+    --text-secondary: #64748b; /* Slate-500 */
+    --border-color: #e2e8f0;   /* Slate-200 */
+
+    /* LIGHT MODE GLASS SETTINGS */
+    --glass-bg: rgba(255, 255, 255, 0.70);
+    
+    /* Border: Subtle Steel Blue tint */
+    --glass-border: rgba(74, 111, 165, 0.3); 
+    
+    /* Shadow: Midnight Blue tint */
+    --glass-shadow: 0 8px 32px 0 rgba(44, 62, 80, 0.15);
 }
 
 [data-theme='dark'] {
-    --main-bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%);
+    /* Dark Mode Gradient */
+    --main-bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    
     --input-bg: rgba(15, 23, 42, 0.6);
-    /* Semi-transparent dark inputs */
     --text-primary: #f8f9fa;
     --text-secondary: #adb5bd;
     --border-color: rgba(255, 255, 255, 0.1);
 
-    /* DARK MODE GLASS SETTINGS (Updated: 0.35 opacity is much clearer) */
     --glass-bg: rgba(20, 25, 40, 0.65);
     --glass-border: rgba(255, 255, 255, 0.15);
-    --glass-shadow: rgba(0, 0, 0, 0.4);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
 }
 
 /* =========================================
@@ -35,7 +45,7 @@
    ========================================= */
 .property-comparison {
     /* Your Gradient */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: transparent;
     min-height: 100vh;
     width: 100%;
     padding-bottom: 2rem;
@@ -47,6 +57,51 @@
     padding-top: 1.5rem;
 }
 
+/* --- NEW: BACKGROUND HANDLER (Light Mode Gradient vs Dark Mode Blobs) --- */
+
+.page-background-handler {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+  transition: background 0.3s ease;
+}
+
+/* ☀️ LIGHT MODE: The "Clean White" Gradient 
+   Passes the "White Background" requirement but adds professional depth. */
+body:not(.dark-theme) .page-background-handler {
+  background: linear-gradient(135deg, #F6F8FD 0%, #E1E6F9 100%);
+}
+
+/* 🌙 DARK MODE: Restore your Cool Blobs */
+body.dark-theme .page-background-handler {
+  background: #1e1e24; /* Base dark color */
+}
+
+/* Dark Mode Blob 1 (Left) */
+body.dark-theme .page-background-handler::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.15) 0%, transparent 50%);
+}
+
+/* Dark Mode Blob 2 (Right) */
+body.dark-theme .page-background-handler::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%);
+}
 /* Dark Mode Background Override */
 .dark-theme .property-comparison {
     /* CHANGED: Removed solid #121212 so the gradient/transparency works */
@@ -68,8 +123,8 @@
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-radius: 20px;
-    border: 1px solid var(--glass-border);
-    box-shadow: 0 8px 32px var(--glass-shadow);
+    border: 1px solid var(--glass-border); 
+    box-shadow: var(--glass-shadow); 
 
     /* Spacing */
     padding: 40px;
@@ -86,7 +141,8 @@
    4. TYPOGRAPHY & UTILITIES
    ========================================= */
 .gradient-text {
-    background: linear-gradient(135deg, #4964df 0%, #764ba2 100%);
+    /* ✅ LIGHT MODE: Matches Header/Buttons (Steel Blue -> Midnight Blue) */
+    background: var(--main-bg-gradient);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -94,7 +150,9 @@
 }
 
 .dark-theme .gradient-text {
-    background: linear-gradient(135deg, #819bff 0%, #a476db 100%);
+    /* 🌙 DARK MODE: Uses a Lighter Blue for visibility on dark backgrounds */
+    /* Standard Steel Blue is too dark for black backgrounds, so we lighten it up */
+    background: linear-gradient(135deg, #6aa2e0 0%, #4ecdc4 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -115,7 +173,6 @@
     margin-top: 0.25rem;
     display: block;
 }
-
 /* =========================================
    5. COMPONENT STYLING
    ========================================= */
@@ -635,3 +692,188 @@
 .border-success:hover { box-shadow: 0 0 20px rgba(25, 135, 84, 0.8), 0 0 40px rgba(25, 135, 84, 0.6); }
 .border-danger:hover { box-shadow: 0 0 20px rgba(220, 53, 69, 0.8), 0 0 40px rgba(220, 53, 69, 0.6); }
 .border-info:hover { box-shadow: 0 0 20px rgba(13, 202, 240, 0.8), 0 0 40px rgba(13, 202, 240, 0.6); }
+/* =========================================
+   12. CONSTRUCTION SCHEDULE TABLE
+   ========================================= */
+
+.schedule-container {
+    background: var(--glass-bg); /* Auto-switches: White Glass (Light) / Dark Glass (Dark) */
+    border: 1px solid var(--glass-border);
+    box-shadow: var(--glass-shadow);
+    border-radius: 12px;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+
+.schedule-header {
+    background: var(--main-bg-gradient); /* Keeps the purple gradient header */
+    padding: 15px 20px;
+    color: white;
+    font-weight: 600;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.schedule-table {
+    width: 100%;
+    font-size: 0.9rem;
+    color: var(--text-primary); /* Auto-switches: Black / White */
+    border-collapse: collapse;
+}
+
+.schedule-table th {
+    background: rgba(0, 0, 0, 0.05); /* Subtle dim for header in Light Mode */
+    padding: 12px 15px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+}
+
+/* Dark Mode Adjustment for TH background */
+[data-theme='dark'] .schedule-table th {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.schedule-table td {
+    padding: 12px 15px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+.schedule-tfoot {
+    background: rgba(0, 0, 0, 0.02);
+    border-top: 2px solid var(--border-color);
+}
+
+[data-theme='dark'] .schedule-tfoot {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.schedule-footer-cell {
+    padding: 15px;
+    color: var(--text-primary);
+    font-weight: bold;
+    font-size: 1rem;
+    text-align: right;
+}
+/* =========================================
+   13. LAYOUT UTILITIES
+   ========================================= */
+
+/* Use this to wrap your main tabs */
+.central-container {
+    max-width: 1300px; /* Standardizes width across all pages */
+    width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 15px;
+    padding-right: 15px;
+}
+
+/* Fixes the uneven spacing inside the breakdown card */
+.section-spacer {
+    margin-bottom: 2rem; /* Consistent vertical spacing */
+}
+/* =========================================
+   14. GLOBAL BRAND THEME OVERRIDES
+   ========================================= */
+
+/* --- SHARED STYLES (Apply to both modes) --- */
+/* Focus rings and links always follow the brand hue */
+.form-control:focus, 
+.form-select:focus {
+    border-color: var(--brand-color) !important;
+    box-shadow: 0 0 0 0.25rem rgba(74, 111, 165, 0.25) !important;
+}
+
+a, .text-primary {
+    color: var(--brand-color) !important;
+    text-decoration: none;
+}
+
+a:hover {
+    color: #34495e; /* Darker shade on hover */
+}
+
+/* =========================================
+   ☀️ LIGHT MODE BUTTONS (Gradient + Glow)
+   Only applies when body is NOT dark theme
+   ========================================= */
+body:not(.dark-theme) .btn-primary {
+    background: var(--main-bg-gradient) !important; /* Steel Blue Gradient */
+    border: 0 !important;
+    color: white !important;
+    box-shadow: 0 4px 15px rgba(74, 111, 165, 0.35); /* Soft Blue Glow */
+    transition: all 0.3s ease;
+}
+
+body:not(.dark-theme) .btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(74, 111, 165, 0.5);
+    filter: brightness(1.1); /* Slight brighten on hover */
+}
+
+/* Active Tabs (Gradient Pill) */
+body:not(.dark-theme) .nav-pills .nav-link.active {
+    background: var(--main-bg-gradient) !important;
+    box-shadow: 0 4px 12px rgba(74, 111, 165, 0.3);
+}
+
+/* Badges (Gradient) */
+body:not(.dark-theme) .badge.bg-primary {
+    background: var(--main-bg-gradient) !important;
+}
+
+/* Outline Buttons (Gradient Text / Border) */
+body:not(.dark-theme) .btn-outline-primary {
+    color: var(--brand-color) !important;
+    border: 2px solid var(--brand-color) !important;
+    background: transparent !important;
+}
+
+body:not(.dark-theme) .btn-outline-primary:hover {
+    background: var(--main-bg-gradient) !important;
+    color: white !important;
+    border-color: transparent !important;
+    box-shadow: 0 4px 15px rgba(74, 111, 165, 0.35);
+}
+
+/* =========================================
+   🌙 DARK MODE BUTTONS (Solid + Clean)
+   Uses flat colors to blend better with dark cards
+   ========================================= */
+body.dark-theme .btn-primary {
+    background: var(--brand-color) !important; /* Solid Steel Blue */
+    border: 1px solid rgba(255,255,255,0.1) !important; /* Subtle border for definition */
+    color: white !important;
+    box-shadow: none !important; /* No glow in dark mode */
+}
+
+body.dark-theme .btn-primary:hover {
+    background: #5b7bb2 !important; /* Slightly lighter steel blue */
+    transform: translateY(-1px);
+}
+
+body.dark-theme .nav-pills .nav-link.active {
+    background: var(--brand-color) !important;
+}
+
+body.dark-theme .badge.bg-primary {
+    background: var(--brand-color) !important;
+}
+
+body.dark-theme .btn-outline-primary {
+    color: #a3c2f0 !important; /* Lighter text for contrast on dark */
+    border-color: #a3c2f0 !important;
+}
+
+body.dark-theme .btn-outline-primary:hover {
+    background: var(--brand-color) !important;
+    color: white !important;
+    border-color: var(--brand-color) !important;
+}
