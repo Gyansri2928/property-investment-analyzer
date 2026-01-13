@@ -6,22 +6,17 @@ import './PropertyComparison.css';
 // ===================== CONSTANTS =====================
 // ... existing DEFAULT_PROPERTY constant ...
 
-const DEFAULT_PROPERTY = {
-    id: 1,
-    size: 1428,
-    exitPrice: 6000
-};
-
 // 1. CONSTANT: Initial State for Property Data
 const INITIAL_PROPERTY_DATA = {
     purchasePrice: '',
     otherCharges: '',
     stampDuty: '',
+    gstPercentage: '',
     exitPrices: [],
     properties: [
         {
-            id: DEFAULT_PROPERTY.id,
-            size: DEFAULT_PROPERTY.size,
+            id: '',
+            size: '',
             name: '',
             location: '',
             rating: 0,
@@ -40,12 +35,12 @@ const INITIAL_PROPERTY_DATA = {
 
 // 2. CONSTANT: Initial State for User Selections
 const INITIAL_USER_SELECTIONS = {
-    selectedPropertyId: DEFAULT_PROPERTY.id,
-    selectedExitPrice: DEFAULT_PROPERTY.exitPrice,
+    selectedPropertyId: 1, // Default to the first empty property
+    selectedExitPrice: '', // Blank
     selectedYears: '',
-    selectedPropertySize: DEFAULT_PROPERTY.size,
-    scenarioSize: DEFAULT_PROPERTY.size,
-    scenarioExitPrice: DEFAULT_PROPERTY.exitPrice,
+    selectedPropertySize: '', // Blank
+    scenarioSize: '',
+    scenarioExitPrice: '',
     scenarioExitPrices: []
 };
 
@@ -515,7 +510,7 @@ const PropertyComparison = () => {
                 properties: [
                     {
                         id: 1,
-                        size: 1428, // Reset to default size or ''
+                        size: '', // Reset to default size or ''
                         name: '',
                         location: '',
                         rating: 0,
@@ -524,6 +519,7 @@ const PropertyComparison = () => {
                     }
                 ]
             }));
+            setUserSelections(INITIAL_USER_SELECTIONS);
 
             setCurrentStep(1);
 
@@ -535,18 +531,21 @@ const PropertyComparison = () => {
         // 1. Internal Helper: Performs the core financial math
         const calculateFinancials = (propertySize, exitPrice, years) => {
             // 1. Get inputs including the new stampDuty
-            const { purchasePrice, otherCharges, stampDuty, assumptions, paymentPlan } = propertyData;
+            const { purchasePrice, otherCharges, stampDuty, gstPercentage, assumptions, paymentPlan } = propertyData;
 
-            const selectedProperty = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId);
+            const selectedProperty = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)
+                || propertyData.properties[0] // Fallback to first
+                || {};
 
             const possessionMonths = getSafeValue(selectedProperty?.possessionMonths) || 0;
             const baseCost = propertySize * getSafeValue(purchasePrice);
             const extraCharges = getSafeValue(otherCharges); // Lumpsum
             const agreementValue = baseCost + extraCharges;
             const stampDutyCost = agreementValue * (getSafeValue(stampDuty) / 100);
+            const gstCost = agreementValue * (getSafeValue(gstPercentage) / 100);
 
             // 3. Sum it up
-            const totalCost = baseCost + extraCharges + stampDutyCost;
+            const totalCost = baseCost;
 
             // ... inside calculateFinancials ...
 
@@ -580,6 +579,8 @@ const PropertyComparison = () => {
             const constructionMonths = possessionMonths;
             let totalIDC = 0;
             let monthlyIDCEMI = 0;
+            let minIDCEMI = 0;
+            let maxIDCEMI = 0;
             let idcSchedule = [];
 
             if (paymentPlan === 'clp' && homeLoanAmount > 0) {
@@ -625,6 +626,12 @@ const PropertyComparison = () => {
                 totalIDC = idcSchedule.reduce((acc, row) => acc + row.interestCost, 0);
                 // Calculate Average
                 monthlyIDCEMI = calculateMonthlyIDCEMI(totalIDC, constructionMonths);
+
+                if (idcSchedule.length > 0) {
+                    const monthlyPayments = idcSchedule.map(s => s.currentTotalMonthlyEMI);
+                    minIDCEMI = Math.min(...monthlyPayments);
+                    maxIDCEMI = Math.max(...monthlyPayments);
+                }
             }
 
             const totalHomeLoanAtCompletion = homeLoanAmount;
@@ -680,8 +687,8 @@ const PropertyComparison = () => {
             const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
 
             return {
-                idcSchedule, propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
-                homeLoanEMI, personalLoan1EMI, personalLoan2EMI,
+                minIDCEMI, maxIDCEMI, idcSchedule, propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
+                homeLoanEMI, personalLoan1EMI, personalLoan2EMI, gstCost,
                 homeLoanAmount, personalLoan1Amount, personalLoan2Amount, downPaymentAmount,
                 totalHomeLoanAtCompletion, homeLoanOutstanding, personalLoan1Outstanding, personalLoan2Outstanding,
                 totalInterestPaid, totalIDC, monthlyIDCEMI, homeLoanInterestPaid, personalLoan1InterestPaid, personalLoan2InterestPaid,
@@ -689,7 +696,7 @@ const PropertyComparison = () => {
                 personalLoan1EMIPaid: personalLoan1EMI * pl1PaymentsMade,
                 personalLoan2EMIPaid: personalLoan2EMI * pl2PaymentsMade,
                 totalEMIPaid, homeLoanPaymentsMade, pl1PaymentsMade, pl2PaymentsMade,
-                saleValue, leftoverCash, netGainLoss, roi, years, exitPrice,
+                saleValue, leftoverCash, stampDutyCost, netGainLoss, roi, years, exitPrice,
                 homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare,
                 hasHomeLoan: homeLoanAmount > 0, hasPersonalLoan1: personalLoan1Amount > 0, hasPersonalLoan2: personalLoan2Amount > 0, hasDownPayment: downPaymentAmount > 0,
                 // Inside the return object of calculateFinancials
@@ -751,6 +758,8 @@ const PropertyComparison = () => {
                 items: [
                     { label: "Property Size", value: `${propertySize} sq.ft` },
                     { label: "Purchase Price", value: `₹${propertyData.purchasePrice}/sq.ft` },
+                    { label: "Stamp Duty", value: formatCurrency(detailedBreakdown.stampDutyCost) },
+                    { label: "GST charges", value: formatCurrency(detailedBreakdown.gstCost) },
                     { label: "Total Property Cost", value: formatCurrency(detailedBreakdown.totalCost) }
                 ]
             },
@@ -850,7 +859,7 @@ const PropertyComparison = () => {
     };
 
     const handleRemoveExitPriceScenario = (index) => {
-        if (userSelections.scenarioExitPrices.length <= 1) return;
+        if (userSelections.scenarioExitPrices.length < 1) return;
 
         setUserSelections(prev => ({
             ...prev,
@@ -1336,7 +1345,7 @@ const PropertyComparison = () => {
                                         <div className="col-md-6">
                                             <label className="form-label">Other Charges (Lumpsum)</label>
                                             <input type="number" className="form-control" value={propertyData.otherCharges} placeholder="e.g. 500000" onChange={(e) => handleInputChange('otherCharges', parseFloat(e.target.value))} />
-                                            <small className="text-muted" style={{ fontSize: '0.75rem' }}>GST, Parking, Club Membership, etc.</small>
+                                            <small className="text-muted" style={{ fontSize: '0.75rem' }}>Parking, Club Membership, etc.</small>
                                         </div>
                                         <div className="col-md-6">
                                             <label className="form-label">Stamp Duty (%)</label>
@@ -1358,6 +1367,42 @@ const PropertyComparison = () => {
                                                     <option key={property.id} value={property.id}>{property.name} ({property.size} sq.ft)</option>
                                                 ))}
                                             </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="mb-4 ps-4 pe-4">
+                                    <div className="row g-3">
+                                        <div className="col-md-6">
+                                            <label className="form-label">GST Percentage</label>
+                                            <div className="input-group">
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={propertyData.gstPercentage}
+                                                    placeholder="e.g. 5 or 12"
+                                                    min="0"
+                                                    max="28"
+                                                    onChange={(e) => handleInputChange('gstPercentage', parseFloat(e.target.value))}
+                                                />
+                                                <span className="input-group-text">%</span>
+                                            </div>
+                                            <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                                                Applied on <b>Base Value</b> of the Property
+                                            </small>
+                                        </div>
+                                        <div className="col-md-6">
+                                            <label className="form-label">Calculated GST Amount</label>
+                                            <div className="form-control bg-light text-secondary">
+                                                {/* Calculate display value on the fly based on inputs */}
+                                                {(() => {
+                                                    const size = userSelections.selectedPropertySize || 0;
+                                                    const price = getSafeValue(propertyData.purchasePrice);
+                                                    const others = getSafeValue(propertyData.otherCharges);
+                                                    const gst = getSafeValue(propertyData.gstPercentage);
+                                                    const totalVal = (size * price) + others;
+                                                    return formatCurrency(totalVal * (gst / 100));
+                                                })()}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1761,26 +1806,37 @@ const PropertyComparison = () => {
                                                 type="number"
                                                 className="form-control"
                                                 value={userSelections.selectedExitPrice}
+                                                placeholder='e.g. 3000'
                                                 onChange={(e) => handleSelectionUpdate('selectedExitPrice', parseFloat(e.target.value))}
                                             />
                                         </div>
 
-                                        {/* Right Column: Scenarios List (Button removed from here) */}
+                                        {/* Right Column: Scenarios List */}
                                         <div className="col-md-6">
                                             <label className="form-label">Scenario Exit Prices</label>
 
-                                            <div className="row g-2">
-                                                {userSelections.scenarioExitPrices.map((price, index) => (
-                                                    <div key={index} className="col-12">
-                                                        <div className="input-group input-group-sm mb-2">
-                                                            <span className="input-group-text">Scenario {index + 1}</span>
-                                                            <input
-                                                                type="number"
-                                                                className="form-control"
-                                                                value={price}
-                                                                onChange={(e) => handleUpdateExitPriceScenario(index, e.target.value)}
-                                                            />
-                                                            {userSelections.scenarioExitPrices.length > 1 && (
+                                            {/* ✅ CHECK: If list is empty, show empty state message */}
+                                            {userSelections.scenarioExitPrices.length === 0 ? (
+                                                <div className="text-center p-3 border rounded bg-light text-muted" style={{ borderStyle: 'dashed' }}>
+                                                    <i className="d-block fs-2 mb-2 opacity-50"></i>
+                                                    <small>
+                                                        Press the <strong>"Add Scenario"</strong> button above<br />
+                                                        to create your first exit price scenario.
+                                                    </small>
+                                                </div>
+                                            ) : (
+                                                <div className="row g-2">
+                                                    {userSelections.scenarioExitPrices.map((price, index) => (
+                                                        <div key={index} className="col-12">
+                                                            <div className="input-group input-group-sm mb-2 ps-4 pe-4">
+                                                                <span className="input-group-text">Scenario {index + 1}</span>
+                                                                <input
+                                                                    type="number"
+                                                                    className="form-control"
+                                                                    value={price}
+                                                                    placeholder={`e.g. ${10000 + (index * 1000)}`}
+                                                                    onChange={(e) => handleUpdateExitPriceScenario(index, e.target.value)}
+                                                                />
                                                                 <button
                                                                     className="btn btn-danger d-flex align-items-center justify-content-center"
                                                                     type="button"
@@ -1790,11 +1846,11 @@ const PropertyComparison = () => {
                                                                 >
                                                                     <i className="bi bi-trash-fill text-white"></i>
                                                                 </button>
-                                                            )}
+                                                            </div>
                                                         </div>
-                                                    </div>
-                                                ))}
-                                            </div>
+                                                    ))}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -2067,9 +2123,16 @@ const PropertyComparison = () => {
                         {/* SPECIAL ROI CARD */}
                         <div className="col-6 col-md-3">
                             <div className="metric-card glass-card text-center h-100 p-3 border border-success shadow">
-                                <div className="rounded-circle bg-success text-white d-flex align-items-center justify-content-center mx-auto mb-3 shadow-sm" style={{ width: '60px', height: '60px' }}><i className="bi bi-graph-up-arrow fs-3"></i></div>
+                                <div className="rounded-circle bg-success text-white d-flex align-items-center justify-content-center mx-auto mb-3 shadow-sm" style={{ width: '60px', height: '60px' }}>
+                                    <i className="bi bi-graph-up-arrow fs-3"></i>
+                                </div>
                                 <h4 className="fw-bold mb-1 text-success">{formatPercent(breakdown.roi)}</h4>
                                 <p className="text-muted mb-0 small fw-bold">Estimated ROI</p>
+
+                                {/* ✅ NEW: Show the Exit Price used */}
+                                <small className="text-muted" style={{ fontSize: '0.8rem' }}>
+                                    @ ₹{breakdown.exitPrice}/sq.ft
+                                </small>
                             </div>
                         </div>
 
@@ -2267,7 +2330,7 @@ const PropertyComparison = () => {
                 <div style={{ maxWidth: '1300px', margin: '0 auto' }}>
                     <div className="row g-3 mb-5">
                         {renderActionBtn("Detailed Breakdown", "View all financial calculations", "bi-calculator", "breakdown", "btn-primary")}
-                        {renderActionBtn("Edit Parameters", "Modify inputs", "bi-pencil-square", "inputs", "btn-outline-light")}
+                        {renderActionBtn("Edit Parameters", "Modify inputs", "bi-pencil-square", "inputs", "btn-outline-primary")}
                     </div>
                 </div>
             </div>
@@ -2392,12 +2455,49 @@ const PropertyComparison = () => {
                                     `Month 0 to Month ${breakdown.possessionMonths}`,
                                     `${breakdown.prePossessionMonths} months`,
                                     <>
-                                        {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 6)}
 
+                                        <div className="col-md-6 mt-1">
+                                            <div
+                                                className="p-2 rounded border text-dark property-card-hover h-100"
+                                                style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
+                                                onClick={() => navigate('/monthly-breakdown', {
+                                                    state: {
+                                                        idcSchedule: breakdown.idcSchedule,
+                                                        pl1EMI: breakdown.personalLoan1EMI,
+                                                        possessionMonths: breakdown.possessionMonths,
+                                                        homeLoanAmount: breakdown.homeLoanAmount,
+                                                        interestRate: propertyData.assumptions.homeLoanRate,
+                                                        propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name
+                                                    }
+                                                })}
+                                            >
+                                                {/* Header Section */}
+                                                <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-10">
+                                                    <small className="fw-bold text-muted" style={{ fontSize: '0.75rem' }}>
+                                                        PL1 EMI
+                                                    </small>
+                                                    <span className="badge text-dark bg-warning" style={{ fontSize: '0.6rem' }}>
+                                                        <i className="bi bi-table me-1"></i>Monthly Schedule
+                                                    </span>
+                                                </div>
+
+                                                {/* ✅ ADDED: Value Section */}
+                                                <div className="text-center py-1">
+                                                    <div className="fw-bold text-success" style={{ fontSize: '1.1rem' }}>
+                                                        {formatCurrency(breakdown.personalLoan1EMI)}
+                                                    </div>
+                                                    <small className="text-muted d-block" style={{ fontSize: '0.65rem', marginTop: '-2px' }}>
+                                                        Per Month (Fixed)
+                                                    </small>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. IDC Breakdown (Min / Avg / Max in one container) */}
                                         {breakdown.hasIDC && (
-                                            <div className="col-6 mb-2">
+                                            <div className="col-md-6 mt-1">
                                                 <div
-                                                    className="p-2 rounded border text-center h-100 bg-warning bg-opacity-10 text-warning property-card-hover"
+                                                    className="p-2 rounded border text-dark property-card-hover h-100"
                                                     style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
                                                     onClick={() => navigate('/schedule', {
                                                         state: {
@@ -2411,11 +2511,43 @@ const PropertyComparison = () => {
                                                         }
                                                     })}
                                                 >
-                                                    <small className="d-block text-muted opacity-75" style={{ fontSize: '0.7rem' }}>Avg IDC / Month</small>
-                                                    <div className="fw-bold">{formatCurrency(breakdown.monthlyIDCEMI)}</div>
-                                                    <div className="badge bg-warning text-dark mt-1" style={{ fontSize: '0.6rem' }}>
-                                                        <i className="bi bi-box-arrow-up-right me-1"></i>
-                                                        Open Schedule
+                                                    {/* Header Row with Title and Button */}
+                                                    <div className="d-flex justify-content-between align-items-center mb-2 pb-1">
+                                                        <small className="fw-bold text-muted" style={{ fontSize: '0.75rem' }}>
+                                                            IDC
+                                                        </small>
+                                                        <span className="badge text-dark bg-warning" style={{ fontSize: '0.6rem' }}>
+                                                            <i className="bi bi-table me-1"></i>Open Schedule
+                                                        </span>
+                                                    </div>
+
+                                                    {/* ✅ THE 3-VALUE LAYOUT (Min | Avg | Max) */}
+                                                    <div className="row g-0 text-center align-items-center">
+
+                                                        {/* 1. MIN (Start) */}
+                                                        <div className="col-4 border-end">
+                                                            <small className="d-block text-muted mb-1" style={{ fontSize: '0.75rem', lineHeight: '1' }}>Min (Start)</small>
+                                                            <div className="fw-bold text-success" style={{ fontSize: '0.85rem' }}>
+                                                                {formatCurrency(breakdown.minIDCEMI)}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* 2. AVERAGE (Middle) */}
+                                                        <div className="col-4 border-end">
+                                                            <small className="d-block text-muted mb-1" style={{ fontSize: '0.75rem', lineHeight: '1' }}>Average</small>
+                                                            <div className="fw-bold text-primary" style={{ fontSize: '0.9rem' }}>
+                                                                {formatCurrency(breakdown.monthlyIDCEMI)}
+                                                            </div>
+                                                        </div>
+
+                                                        {/* 3. MAX (Peak) */}
+                                                        <div className="col-4 px-1">
+                                                            <small className="d-block text-muted mb-1" style={{ fontSize: '0.75rem', lineHeight: '1' }}>Max (Peak)</small>
+                                                            <div className="fw-bold text-danger" style={{ fontSize: '0.85rem' }}>
+                                                                {formatCurrency(breakdown.maxIDCEMI)}
+                                                            </div>
+                                                        </div>
+
                                                     </div>
                                                 </div>
                                             </div>
@@ -2627,58 +2759,6 @@ const PropertyComparison = () => {
                                 "bi-cash-stack",
                                 <div className="fs-6 text-end">{breakdown.netGainLoss >= 0 ? 'PROFIT' : 'LOSS'}</div>
                             )}
-                        </div>
-
-                        {/* 10. Multiple Exit Scenarios */}
-                        <div className="section-spacer">
-                            <div className="p-3 bg-light rounded">
-                                <div className="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 className="mb-0">
-                                        <i className="bi bi-bar-chart me-2"></i>
-                                        Multiple Exit Price Scenarios
-                                    </h6>
-                                    <span className="badge bg-primary">
-                                        {calculatedData.multipleScenarios?.length || 0} scenarios
-                                    </span>
-                                </div>
-                                <div className="table-responsive">
-                                    <table className="table table-bordered table-hover mb-0">
-                                        <thead>
-                                            <tr>
-                                                <th>Scenario</th>
-                                                <th>Exit Price (₹/sq.ft)</th>
-                                                <th>Sale Value</th>
-                                                <th>Leftover Cash</th>
-                                                <th>Net Profit/Loss</th>
-                                                <th>ROI</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {calculatedData.multipleScenarios?.map((scenario, index) => (
-                                                <tr key={index} className={scenario.exitPrice === userSelections.selectedExitPrice ? 'table-primary' : ''}>
-                                                    <td>Scenario {index + 1}</td>
-                                                    <td>
-                                                        <strong>₹{scenario.exitPrice}</strong>
-                                                        {scenario.exitPrice === userSelections.selectedExitPrice && (
-                                                            <span className="badge bg-primary ms-2">Selected</span>
-                                                        )}
-                                                    </td>
-                                                    <td>{formatLakhs(scenario.saleValue)}</td>
-                                                    <td className={scenario.leftoverCash >= 0 ? 'text-success' : 'text-danger'}>
-                                                        {formatLakhs(scenario.leftoverCash)}
-                                                    </td>
-                                                    <td className={scenario.netProfit >= 0 ? 'text-success' : 'text-danger'}>
-                                                        {formatLakhs(scenario.netProfit)}
-                                                    </td>
-                                                    <td className={scenario.roi >= 0 ? 'text-success' : 'text-danger'}>
-                                                        {formatPercent(scenario.roi)}
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
                         </div>
 
                     </div> {/* End Card Body */}

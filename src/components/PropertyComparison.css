@@ -27,17 +27,24 @@
 }
 
 [data-theme='dark'] {
-    /* Dark Mode Gradient */
-    --main-bg-gradient: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    /* 🌑 Base Background: Deep Midnight Blue (Almost Black) */
+    --main-bg-gradient: #020617; 
     
-    --input-bg: rgba(15, 23, 42, 0.6);
-    --text-primary: #f8f9fa;
-    --text-secondary: #adb5bd;
-    --border-color: rgba(255, 255, 255, 0.1);
+    /* 🔵 Brand Color: Electric Blue */
+    --brand-color: #3b82f6;
 
-    --glass-bg: rgba(20, 25, 40, 0.65);
-    --glass-border: rgba(255, 255, 255, 0.15);
-    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    /* Inputs: Dark Blue-Grey */
+    --input-bg: rgba(15, 23, 42, 0.8);
+    
+    /* Text: High Contrast White & Muted Blue-Grey */
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
+    --border-color: rgba(255, 255, 255, 0.08);
+
+    /* 🪟 Glass: Darker, cleaner glass for high contrast */
+    --glass-bg: rgba(15, 23, 42, 0.6); 
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
 
 /* =========================================
@@ -77,35 +84,46 @@ body:not(.dark-theme) .page-background-handler {
 }
 
 /* 🌙 DARK MODE: Restore your Cool Blobs */
-body.dark-theme .page-background-handler {
-  background: #1e1e24; /* Base dark color */
+body.dark-theme {
+    /* The Royal Gradient: Deep Black to Midnight Blue */
+    background: linear-gradient(to bottom, #020617 0%, #0f172a 100%) !important;
+    
+    /* Lock it so it covers the whole screen */
+    min-height: 100vh;
+    background-attachment: fixed;
+    color: var(--text-primary);
 }
 
 /* Dark Mode Blob 1 (Left) */
 body.dark-theme .page-background-handler::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.15) 0%, transparent 50%);
+  top: -10%;
+  left: -10%;
+  width: 70%;
+  height: 70%;
+  /* This creates the "Cyber" glow effect */
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 60%);
+  z-index: -1;
 }
 
 /* Dark Mode Blob 2 (Right) */
 body.dark-theme .page-background-handler::after {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%);
+  bottom: -10%;
+  right: -10%;
+  width: 70%;
+  height: 70%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 60%);
+  z-index: -1;
 }
 /* Dark Mode Background Override */
+/* Find this block and replace it */
 .dark-theme .property-comparison {
-    /* CHANGED: Removed solid #121212 so the gradient/transparency works */
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    background: transparent !important; /* Let the body gradient shine */
+    box-shadow: none;
+    border: none;
 }
 
 /* =========================================
@@ -848,10 +866,11 @@ body:not(.dark-theme) .btn-outline-primary:hover {
    Uses flat colors to blend better with dark cards
    ========================================= */
 body.dark-theme .btn-primary {
-    background: var(--brand-color) !important; /* Solid Steel Blue */
-    border: 1px solid rgba(255,255,255,0.1) !important; /* Subtle border for definition */
+    background: #6366f1 !important; /* Electric Indigo */
+    border: 1px solid rgba(255,255,255,0.1) !important;
     color: white !important;
-    box-shadow: none !important; /* No glow in dark mode */
+    /* Subtle indigo glow */
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important; 
 }
 
 body.dark-theme .btn-primary:hover {

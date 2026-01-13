@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { PropertyComparison } from './components';
 import Auth from './components/Auth';
 import IdcSchedulePage from './components/idcschedule'; // Import the new page
+import MonthlyBreakdownPage from './components/monthlybreakdown';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './App.css';
@@ -431,6 +432,7 @@ function App() {
         <Route path="/" element={<MainAppContent />} />
         <Route path="/verify-email" element={<EmailVerification />} />
         <Route path="/schedule" element={<IdcSchedulePage />} />
+        <Route path="/monthly-breakdown" element={<MonthlyBreakdownPage />}/>
       </Routes>
     </Router>
   );
