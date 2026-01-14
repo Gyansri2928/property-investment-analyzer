@@ -10,9 +10,11 @@ const IdcSchedulePage = () => {
   const {
     idcSchedule,
     pl1EMI,
-    totalIDC,
+    // totalIDC, // We will recalculate this based on the filtered view
     possessionMonths,
     homeLoanAmount = 0,
+    // ✅ NEW: Receive the user's holding period
+    totalHoldingMonths
   } = location.state || {};
 
   const formatCurrency = (value) =>
@@ -30,17 +32,28 @@ const IdcSchedulePage = () => {
   }
 
   // ==========================================
-  // ⚙️ LOGIC
+  // ⚙️ LOGIC: FILTER & RECALCULATE
   // ==========================================
+
+  // 1. Determine Cutoff: Stop at the earlier of Possession OR Exit Month
+  const holdingLimit = totalHoldingMonths ? parseInt(totalHoldingMonths) : possessionMonths;
+  const cutoffMonth = Math.min(possessionMonths, holdingLimit);
+
+  // 2. Filter the Schedule: Only show slabs released BEFORE or ON the cutoff month
+  const filteredSchedule = idcSchedule.filter(row => row.releaseMonth <= cutoffMonth);
+
+  // 3. Recalculate Summaries based on FILTERED data
   const disbursementPerSlab = idcSchedule.length > 0 ? homeLoanAmount / idcSchedule.length : 0;
-  const grandTotalInterest = idcSchedule.reduce((acc, row) => acc + row.interestCost, 0);
+  
+  // Note: We sum up the interest cost of only the slabs that were actually released
+  const grandTotalInterest = filteredSchedule.reduce((acc, row) => acc + row.interestCost, 0);
 
   // Base Interest for ONE single slab
   const baseSlabInterest = disbursementPerSlab * (9.0 / 100) / 12;
 
-  // ✅ UPDATED: Calculate Pure Interest Min/Max (Excluding PL1)
-  const minMonthlyInterest = baseSlabInterest; // First month (1 slab)
-  const maxMonthlyInterest = baseSlabInterest * idcSchedule.length; // Last month (All slabs)
+  // 4. Calculate Pure Interest Min/Max based on ACTIVE slabs count
+  const minMonthlyInterest = filteredSchedule.length > 0 ? baseSlabInterest : 0; // First month (1 slab)
+  const maxMonthlyInterest = baseSlabInterest * filteredSchedule.length; // Last active month
 
   return (
     <div className="property-comparison" style={{ minHeight: '100vh', position: 'relative' }}>
@@ -56,22 +69,21 @@ const IdcSchedulePage = () => {
               <i className="bi bi-calendar-week me-3"></i>Construction Schedule
             </h2>
             <p className="mb-0" style={{ color: 'var(--text-secondary)' }}>
-              Breakdown up to Possession (Month {possessionMonths})
+              Breakdown up to Month {cutoffMonth} <span className="text-muted small">(Exit/Possession)</span>
             </p>
           </div>
           <button
             className="btn btn-outline-primary rounded-pill px-4 btn-sm"
-            // ✅ Use this explicit navigation with state
             onClick={() => navigate('/', { state: { returnTab: 'breakdown' } })}
           >
             <i className="bi bi-arrow-left me-2"></i>Back to Dashboard
           </button>
         </div>
 
-        {/* --- SUMMARY CARDS (UPDATED) --- */}
+        {/* --- SUMMARY CARDS --- */}
         <div className="glass-card row g-4 mb-5">
 
-          {/* Card 1: Total Interest */}
+          {/* Card 1: Total Interest (Filtered) */}
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-warning">
               <div className="d-flex align-items-center">
@@ -81,12 +93,13 @@ const IdcSchedulePage = () => {
                 <div>
                   <small className="text-uppercase fw-bold opacity-75">Total Interest Cost</small>
                   <h3 className="fw-bold mt-1 mb-0">{formatCurrency(grandTotalInterest)}</h3>
+                  <small className="text-muted" style={{fontSize: '0.7rem'}}>(For displayed period)</small>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Min Monthly IDC (Pure Interest) */}
+          {/* Card 2: Min Monthly IDC */}
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-success">
               <div className="d-flex align-items-center">
@@ -94,7 +107,6 @@ const IdcSchedulePage = () => {
                   <i className="bi bi-arrow-down-circle fs-3"></i>
                 </div>
                 <div>
-                  {/* ✅ Changed Label & Value to Pure Interest */}
                   <small className="text-uppercase fw-bold opacity-75 d-block">Min Monthly IDC</small>
                   <h3 className="fw-bold mt-1 mb-0">{formatCurrency(minMonthlyInterest)}</h3>
                 </div>
@@ -117,7 +129,7 @@ const IdcSchedulePage = () => {
             </div>
           </div>
 
-          {/* Card 4: Max Monthly IDC (Pure Interest) */}
+          {/* Card 4: Max Monthly IDC */}
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-danger">
               <div className="d-flex align-items-center">
@@ -125,7 +137,6 @@ const IdcSchedulePage = () => {
                   <i className="bi bi-arrow-up-circle fs-3"></i>
                 </div>
                 <div>
-                  {/* ✅ Changed Label & Value to Pure Interest */}
                   <small className="text-uppercase fw-bold opacity-75">Max Monthly IDC</small>
                   <h3 className="fw-bold mt-1 mb-0">{formatCurrency(maxMonthlyInterest)}</h3>
                 </div>
@@ -134,7 +145,7 @@ const IdcSchedulePage = () => {
           </div>
         </div>
 
-        {/* --- TABLE (Matches Previous Logic) --- */}
+        {/* --- TABLE (Using filteredSchedule) --- */}
         <div className="schedule-container">
           <div className="schedule-header">
             <i className="bi bi-table me-2"></i> Disbursement & IDC Breakdown
@@ -149,39 +160,39 @@ const IdcSchedulePage = () => {
                   <th style={{ width: '15%', textAlign: 'right', color: '#0dcaf0', textTransform: 'uppercase' }}>Disbursement Amount (₹)</th>
                   <th style={{ width: '10%', textAlign: 'center', textTransform: 'uppercase' }}>Interest Rate (p.a.)</th>
                   <th style={{ width: '15%', textAlign: 'center', textTransform: 'uppercase' }}>Months to Possession</th>
-
-                  {/* Monthly Interest Column */}
                   <th style={{ width: '20%', textAlign: 'right', color: '#ffc107', textTransform: 'uppercase' }}>Monthly Interest (₹)</th>
-
                   <th style={{ width: '20%', textAlign: 'right', color: 'var(--brand-color)', textTransform: 'uppercase' }}>Total IDC (₹)</th>
                 </tr>
               </thead>
               <tbody>
-                {idcSchedule.map((row, idx) => {
-                  const monthsToPossession = Math.max(0, possessionMonths - row.releaseMonth);
+                {filteredSchedule.length > 0 ? (
+                  filteredSchedule.map((row, idx) => {
+                    const monthsToPossession = Math.max(0, possessionMonths - row.releaseMonth);
+                    const cumulativeMonthlyInterest = baseSlabInterest * (idx + 1);
 
-                  // Cumulative Monthly Interest Calculation
-                  const cumulativeMonthlyInterest = baseSlabInterest * (idx + 1);
-
-                  return (
-                    <tr key={idx}>
-                      <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{row.slabNo}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{row.releaseMonth}</td>
-                      <td style={{ textAlign: 'right', color: '#0dcaf0', fontWeight: '500' }}>{formatCurrency(disbursementPerSlab)}</td>
-                      <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>9.00%</td>
-                      <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--text-primary)' }}>{monthsToPossession}</td>
-
-                      {/* Cumulative Monthly Interest */}
-                      <td style={{ textAlign: 'right', color: '#ffc107', fontWeight: '500' }}>
-                        {formatCurrency(cumulativeMonthlyInterest)}
-                      </td>
-
-                      <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--brand-color)', background: 'rgba(102, 126, 234, 0.05)' }}>
-                        {formatCurrency(row.interestCost)}
-                      </td>
-                    </tr>
-                  );
-                })}
+                    return (
+                      <tr key={idx}>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{row.slabNo}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{row.releaseMonth}</td>
+                        <td style={{ textAlign: 'right', color: '#0dcaf0', fontWeight: '500' }}>{formatCurrency(disbursementPerSlab)}</td>
+                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>9.00%</td>
+                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--text-primary)' }}>{monthsToPossession}</td>
+                        <td style={{ textAlign: 'right', color: '#ffc107', fontWeight: '500' }}>
+                          {formatCurrency(cumulativeMonthlyInterest)}
+                        </td>
+                        <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--brand-color)', background: 'rgba(102, 126, 234, 0.05)' }}>
+                          {formatCurrency(row.interestCost)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="7" className="text-center py-4 text-muted">
+                      No disbursements scheduled within this holding period.
+                    </td>
+                  </tr>
+                )}
               </tbody>
 
               <tfoot className="schedule-tfoot">

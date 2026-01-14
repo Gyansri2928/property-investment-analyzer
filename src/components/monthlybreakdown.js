@@ -12,7 +12,9 @@ const MonthlyBreakdownPage = () => {
     possessionMonths,
     homeLoanAmount,
     propertyName,
-    interestRate = 9.0
+    interestRate = 9.0,
+    // ✅ NEW: Receive the user's holding period
+    totalHoldingMonths 
   } = location.state || {};
 
   const formatCurrency = (val) => val ? `₹${Math.round(val).toLocaleString()}` : '₹0';
@@ -27,7 +29,13 @@ const MonthlyBreakdownPage = () => {
   let cumulativeDisbursement = 0;
   let activeSlabs = 0;
 
-  for (let m = 0; m <= possessionMonths; m++) {
+  // ✅ FIX: Determine where to stop the table.
+  // We stop at the EARLIER of: Possession Date OR User's Exit Date
+  const holdingLimit = totalHoldingMonths ? parseInt(totalHoldingMonths) : possessionMonths;
+  const loopLimit = Math.min(possessionMonths, holdingLimit);
+
+  // ✅ FIX: Update loop condition to use 'loopLimit' instead of 'possessionMonths'
+  for (let m = 0; m <= loopLimit; m++) {
     const isDisbursementMonth = idcSchedule.some(s => s.releaseMonth === m);
 
     if (isDisbursementMonth) {
@@ -53,7 +61,7 @@ const MonthlyBreakdownPage = () => {
   }
 
   // ==========================================
-  // 📊 LOGIC: SUMMARY CARD CALCULATIONS (UPDATED)
+  // 📊 LOGIC: SUMMARY CARD CALCULATIONS
   // ==========================================
 
   // 1. Grand Total Outflow (Sum of all Monthly Outflows)
@@ -78,11 +86,12 @@ const MonthlyBreakdownPage = () => {
               <h4 className="fw-bold gradient-text mb-1">Monthly Cashflow Ledger</h4>
               <p className="text-muted mb-0 small">
                 Combined PL1 + IDC Breakdown for <span className="fw-bold text-primary">{propertyName}</span>
+                {/* Optional: Show the range being displayed */}
+                <span className="ms-2 badge bg-light text-secondary border">Month 0 - {loopLimit}</span>
               </p>
             </div>
             <button
               className="btn btn-outline-primary rounded-pill px-4 btn-sm"
-              // ✅ Use this explicit navigation with state
               onClick={() => navigate('/', { state: { returnTab: 'breakdown' } })}
             >
               <i className="bi bi-arrow-left me-2"></i>Back
@@ -90,7 +99,7 @@ const MonthlyBreakdownPage = () => {
           </div>
         </div>
 
-        {/* 📊 NEW SUMMARY CARDS SECTION */}
+        {/* 📊 SUMMARY CARDS SECTION */}
         <div className="glass-card mb-5 p-4">
           <div className="row g-4">
 
@@ -124,7 +133,7 @@ const MonthlyBreakdownPage = () => {
               </div>
             </div>
 
-            {/* Card 3: Fixed PL1 (Kept for reference) */}
+            {/* Card 3: Fixed PL1 */}
             <div className="col-md-6">
               <div className="glass-card p-4 h-100 border-start border-2 border-info">
                 <div className="d-flex align-items-center">
@@ -179,8 +188,8 @@ const MonthlyBreakdownPage = () => {
                     {/* Month */}
                     <td className="fw-bold">{row.month}</td>
                     {/* Disbursement */}
-                    <td className="text-secondary">
-                      {row.disbursement > 0 ? <span className="text-dark fw-bold">{formatCurrency(row.disbursement)}</span> : '-'}
+                    <td className="text-muted">
+                      {row.disbursement > 0 ? <span className="text-muted fw-bold">{formatCurrency(row.disbursement)}</span> : '-'}
                     </td>
                     {/* Active Slabs */}
                     <td className="text-muted">{row.activeSlabs}</td>

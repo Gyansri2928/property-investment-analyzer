@@ -25,7 +25,8 @@ const INITIAL_PROPERTY_DATA = {
     ],
     paymentPlan: 'clp',
     assumptions: {
-        homeLoanRate: '', homeLoanTerm: '', homeLoanStartMonth: 25, homeLoanShare: 80,
+        homeLoanRate: '', homeLoanTerm: '', homeLoanShare: 80, homeLoanStartMonth: 0, // This now acts as "Delay" in Default mode, or "Month" in Manual mode
+        homeLoanStartMode: 'default',
         personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
         personalLoan2Rate: '', personalLoan2Term: 7, personalLoan2StartMonth: 30, personalLoan2Share: 10,
         downPaymentShare: 0,
@@ -93,10 +94,6 @@ const calculateTotalInterestPaid = (principal, annualRate, years, paymentsMade) 
     return interestPaid;
 };
 
-const calculateMonthlyIDCEMI = (totalIDCAmount, constructionMonths) => {
-    if (!totalIDCAmount || totalIDCAmount === 0 || constructionMonths <= 0) return 0;
-    return totalIDCAmount / constructionMonths; // Returns Average
-};
 
 // ===================== 2. UI TEMPLATES (Stateless) =====================
 
@@ -350,6 +347,18 @@ const PropertyComparison = () => {
         // Else start at Step 1
         return 1;
     });
+    const [maxStepReached, setMaxStepReached] = useState(() => {
+        // Initialize max step same as current step logic
+        const savedData = localStorage.getItem('propertyCalc_data');
+        if (savedData) {
+            const parsed = JSON.parse(savedData);
+            if (parsed.purchasePrice && parsed.purchasePrice > 0) {
+                return 4; // Everything unlocked
+            }
+        }
+        return 1;
+    });
+
     const [showDataEnteredAlert, setShowDataEnteredAlert] = useState(false);
 
     // 1. Input Data State (Load from Local Storage OR use Default)
@@ -363,6 +372,16 @@ const PropertyComparison = () => {
         }
     });
 
+    // ⬇️ NEW: Auto-populate Exit Price when entering Step 4
+    useEffect(() => {
+        if (currentStep === 4) {
+            // Only auto-fill if currently empty or 0, and we have a Purchase Price to work with
+            if ((!userSelections.selectedExitPrice || userSelections.selectedExitPrice === 0) && propertyData.purchasePrice) {
+                const defaultExit = parseFloat(propertyData.purchasePrice) + 2500;
+                setUserSelections(prev => ({ ...prev, selectedExitPrice: defaultExit }));
+            }
+        }
+    }, [currentStep, propertyData.purchasePrice]);
 
     // 2. Analysis Selection State (Load from Local Storage OR use Default)
     const [userSelections, setUserSelections] = useState(() => {
@@ -522,6 +541,7 @@ const PropertyComparison = () => {
             setUserSelections(INITIAL_USER_SELECTIONS);
 
             setCurrentStep(1);
+            setMaxStepReached(1);   // Lock future steps (Step 2, 3, 4 become disabled again)
 
             alert("Property details reset. Loan settings preserved.");
         }
@@ -537,6 +557,16 @@ const PropertyComparison = () => {
                 || propertyData.properties[0] // Fallback to first
                 || {};
 
+            const periodUnit = propertyData.assumptions.holdingPeriodUnit || 'years';
+            let totalHoldingMonths;
+            if (periodUnit === 'months') {
+                totalHoldingMonths = parseFloat(years) || 0; // Input is already in months
+            } else {
+                totalHoldingMonths = (parseFloat(years) || 0) * 12; // Convert years to months
+            }
+            // ✅ FIX: Round to 2 decimal places to prevent long strings (e.g., 0.42 instead of 0.41666...)
+            const valYears = totalHoldingMonths / 12;
+            const displayYears = Math.round(valYears * 100) / 100;
             const possessionMonths = getSafeValue(selectedProperty?.possessionMonths) || 0;
             const baseCost = propertySize * getSafeValue(purchasePrice);
             const extraCharges = getSafeValue(otherCharges); // Lumpsum
@@ -547,7 +577,26 @@ const PropertyComparison = () => {
             // 3. Sum it up
             const totalCost = baseCost;
 
-            // ... inside calculateFinancials ...
+            // 1. Determine Construction Period (Base)
+            // If CLP, use explicit construction years. If not, fallback to possession months.
+            const constructionPeriodMonths = paymentPlan === 'clp'
+                ? (getSafeValue(assumptions.clpDurationYears) * 12)
+                : possessionMonths;
+
+            // 2. Determine Absolute Start Month based on Mode
+            const hlMode = assumptions.homeLoanStartMode || 'default';
+            const hlInputValue = getSafeValue(assumptions.homeLoanStartMonth); // This is either 'Delay' or 'Month'
+
+            let realHomeLoanStartMonth;
+
+            if (hlMode === 'manual') {
+                // Manual Mode: User defines the exact month
+                realHomeLoanStartMonth = hlInputValue;
+            } else {
+                // Default Mode: Construction Period + Delay + 1
+                // User input 'hlInputValue' is treated as the "Delay"
+                realHomeLoanStartMonth = constructionPeriodMonths + hlInputValue + 1;
+            }
 
             // Plan Logic
             let homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare;
@@ -622,16 +671,36 @@ const PropertyComparison = () => {
                         }
                     }
                 }
-                // NEW (Correct): Sums up the specific interest cost of each slab
-                totalIDC = idcSchedule.reduce((acc, row) => acc + row.interestCost, 0);
-                // Calculate Average
-                monthlyIDCEMI = calculateMonthlyIDCEMI(totalIDC, constructionMonths);
+                const cutoffMonth = Math.min(totalHoldingMonths, possessionMonths);
+                let runningTotalInterest = 0;
+                let observedMin = Infinity;
+                let observedMax = 0;
+                let monthsWithPayment = 0;
 
-                if (idcSchedule.length > 0) {
-                    const monthlyPayments = idcSchedule.map(s => s.currentTotalMonthlyEMI);
-                    minIDCEMI = Math.min(...monthlyPayments);
-                    maxIDCEMI = Math.max(...monthlyPayments);
+                for (let m = 1; m <= cutoffMonth; m++) {
+                    // Find which slabs are active in this specific month 'm'
+                    // A slab is active if its releaseMonth <= current month 'm'
+                    const activeSlabsCount = idcSchedule.filter(s => s.releaseMonth <= m).length;
+
+                    if (activeSlabsCount > 0) {
+                        // Calculate interest for this month: (Slab Amount * Active Slabs) * Rate / 12
+                        const currentMonthInterest = (slabAmount * activeSlabsCount) * (assumptions.homeLoanRate / 100) / 12;
+
+                        runningTotalInterest += currentMonthInterest;
+
+                        // Update Min/Max tracking
+                        if (currentMonthInterest < observedMin) observedMin = currentMonthInterest;
+                        if (currentMonthInterest > observedMax) observedMax = currentMonthInterest;
+                        monthsWithPayment++;
+                    }
                 }
+                // NEW (Correct): Sums up the specific interest cost of each slab
+                totalIDC = runningTotalInterest;
+                minIDCEMI = monthsWithPayment > 0 ? observedMin : 0;
+                maxIDCEMI = observedMax;
+                // Average = Total Paid / Actual Months Held (or Months with payment)
+                monthlyIDCEMI = monthsWithPayment > 0 ? (totalIDC / cutoffMonth) : 0;
+
             }
 
             const totalHomeLoanAtCompletion = homeLoanAmount;
@@ -640,10 +709,8 @@ const PropertyComparison = () => {
             const homeLoanEMI = homeLoanAmount > 0 ? calculateEMI(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm) : 0;
             const personalLoan1EMI = personalLoan1Amount > 0 ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term) : 0;
             const personalLoan2EMI = personalLoan2Amount > 0 ? calculateEMI(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term) : 0;
-
-            const totalHoldingMonths = years * 12;
             // FIX: Add the delay to the possession month (Possession + Delay)
-            const homeLoanPaymentsMade = Math.max(0, totalHoldingMonths - (possessionMonths + assumptions.homeLoanStartMonth));
+            const homeLoanPaymentsMade = Math.max(0, totalHoldingMonths - (realHomeLoanStartMonth - 1));
             const pl1PaymentsMade = Math.max(0, totalHoldingMonths - assumptions.personalLoan1StartMonth);
             const pl2PaymentsMade = Math.max(0, totalHoldingMonths - (possessionMonths + assumptions.personalLoan2StartMonth));
             const homeLoanOutstanding = homeLoanAmount > 0 ? calculateOutstandingAfterPayments(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm, homeLoanPaymentsMade) : 0;
@@ -655,8 +722,6 @@ const PropertyComparison = () => {
             const personalLoan2InterestPaid = personalLoan2Amount > 0 ? calculateTotalInterestPaid(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term, pl2PaymentsMade) : 0;
 
             const totalLoanOutstanding = homeLoanOutstanding + personalLoan1Outstanding + personalLoan2Outstanding;
-            const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + totalIDC;
-
             // Actual Total Paid based on start dates
             const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC; // Added totalIDC here for accuracy
             const saleValue = propertySize * exitPrice;
@@ -681,34 +746,76 @@ const PropertyComparison = () => {
             // --- FIX ENDS HERE ---
             //const roi = totalCashInvested > 0 ? (netGainLoss / totalCashInvested) * 100 : 0;
 
-            const prePossessionMonths = possessionMonths;
-            const postPossessionMonths = totalHoldingMonths - possessionMonths;
+            const prePossessionMonths = Math.min(totalHoldingMonths, possessionMonths);
+            const postPossessionMonths = Math.max(0, totalHoldingMonths - possessionMonths);
             const prePossessionEMI = personalLoan1EMI + monthlyIDCEMI;
             const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
+            const actualIDCPaid = monthlyIDCEMI * prePossessionMonths;
+
+            const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + actualIDCPaid;
+
 
             return {
+                // --- Basic Loan & Cost Metrics ---
                 minIDCEMI, maxIDCEMI, idcSchedule, propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
                 homeLoanEMI, personalLoan1EMI, personalLoan2EMI, gstCost,
+
+                // --- Principal Loan Amounts ---
                 homeLoanAmount, personalLoan1Amount, personalLoan2Amount, downPaymentAmount,
                 totalHomeLoanAtCompletion, homeLoanOutstanding, personalLoan1Outstanding, personalLoan2Outstanding,
-                totalInterestPaid, totalIDC, monthlyIDCEMI, homeLoanInterestPaid, personalLoan1InterestPaid, personalLoan2InterestPaid,
+
+                // --- Interest Metrics (Duplicates removed from here) ---
+                totalInterestPaid, totalIDC, monthlyIDCEMI,
+                homeLoanInterestPaid, personalLoan1InterestPaid, personalLoan2InterestPaid,
+
+                // --- Total Paid Calculations ---
                 homeLoanEMIPaid: homeLoanEMI * homeLoanPaymentsMade,
                 personalLoan1EMIPaid: personalLoan1EMI * pl1PaymentsMade,
                 personalLoan2EMIPaid: personalLoan2EMI * pl2PaymentsMade,
                 totalEMIPaid, homeLoanPaymentsMade, pl1PaymentsMade, pl2PaymentsMade,
-                saleValue, leftoverCash, stampDutyCost, netGainLoss, roi, years, exitPrice,
+
+                // --- Profit & Sale Metrics ---
+                saleValue, leftoverCash, stampDutyCost, netGainLoss, roi, exitPrice,
+
+                // --- Plan Shares ---
                 homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare,
-                hasHomeLoan: homeLoanAmount > 0, hasPersonalLoan1: personalLoan1Amount > 0, hasPersonalLoan2: personalLoan2Amount > 0, hasDownPayment: downPaymentAmount > 0,
-                // Inside the return object of calculateFinancials
-                homeLoanStartMonth: possessionMonths + assumptions.homeLoanStartMonth, // <--- UPDATE THIS TOO
-                pl1StartMonth: assumptions.personalLoan1StartMonth, pl2StartMonth: possessionMonths,
-                homeLoanSelectedMonths: assumptions.homeLoanStartMonth, pl1SelectedMonths: assumptions.personalLoan1StartMonth, pl2SelectedMonths: assumptions.personalLoan2StartMonth,
-                possessionMonths: possessionMonths, totalHoldingMonths,
-                prePossessionMonths, postPossessionMonths, prePossessionEMI, postPossessionEMI,
-                prePossessionTotal: prePossessionEMI * prePossessionMonths, postPossessionTotal: postPossessionEMI * postPossessionMonths,
-                prePossessionComponents: { pl1EMI: personalLoan1EMI, monthlyIDCEMI, total: prePossessionEMI },
-                constructionMonths: paymentPlan === 'clp' ? assumptions.clpDurationYears * 12 : 0,
-                hasIDC: totalIDC > 0
+
+                // --- Display Helpers ---
+                years: displayYears, // (Kept this one, removed the duplicate 'years')
+
+                // --- Booleans ---
+                hasHomeLoan: homeLoanAmount > 0,
+                hasPersonalLoan1: personalLoan1Amount > 0,
+                hasPersonalLoan2: personalLoan2Amount > 0,
+                hasDownPayment: downPaymentAmount > 0,
+                hasIDC: totalIDC > 0,
+
+                // --- Timing & Breakdown Details ---
+                homeLoanStartMonth: realHomeLoanStartMonth,
+                pl1StartMonth: assumptions.personalLoan1StartMonth,
+                pl2StartMonth: possessionMonths,
+                homeLoanSelectedMonths: assumptions.homeLoanStartMonth,
+                pl1SelectedMonths: assumptions.personalLoan1StartMonth,
+                pl2SelectedMonths: assumptions.personalLoan2StartMonth,
+
+                possessionMonths: possessionMonths,
+                totalHoldingMonths,
+
+                // --- Pre/Post Possession Split ---
+                prePossessionMonths,
+                postPossessionMonths,
+                prePossessionEMI,
+                postPossessionEMI,
+                prePossessionTotal: prePossessionEMI * prePossessionMonths,
+                postPossessionTotal: postPossessionEMI * postPossessionMonths,
+
+                prePossessionComponents: {
+                    pl1EMI: personalLoan1EMI,
+                    monthlyIDCEMI,
+                    total: prePossessionEMI
+                },
+
+                constructionMonths: paymentPlan === 'clp' ? assumptions.clpDurationYears * 12 : 0
             };
         };
 
@@ -736,12 +843,12 @@ const PropertyComparison = () => {
         });
 
         const multipleScenarios = allExitPrices.map(price => {
-            const breakdown = calculateFinancials(propertySize, price, userSelections.selectedYears);
+            const breakdown = calculateFinancials(propertySize, price, propertyData.assumptions.investmentPeriod);
             return {
                 exitPrice: price,
                 saleValue: breakdown.saleValue,
                 netProfit: breakdown.netGainLoss,
-                roi: breakdown.totalCashInvested > 0 ? (breakdown.netGainLoss / breakdown.totalCashInvested) * 100 : 0,
+                roi: breakdown.roi,
                 appreciation: ((price - propertyData.purchasePrice) / propertyData.purchasePrice) * 100,
                 cashInvested: breakdown.totalCashInvested,
                 loanOutstanding: breakdown.totalLoanOutstanding,
@@ -770,7 +877,7 @@ const PropertyComparison = () => {
                     { label: "Home Loan", value: `${detailedBreakdown.homeLoanShare}% (${formatCurrency(detailedBreakdown.homeLoanAmount)})` },
                     { label: "PL1", value: `${detailedBreakdown.personalLoan1Share}% (${formatCurrency(detailedBreakdown.personalLoan1Amount)})` },
                     { label: "PL2", value: `${detailedBreakdown.personalLoan2Share}% (${formatCurrency(detailedBreakdown.personalLoan2Amount)})` },
-                    { label: "Total Cash Invested", value: formatCurrency(detailedBreakdown.totalCashInvested) }
+                    { label: "Total PL Amount", value: formatCurrency(detailedBreakdown.totalCashInvested) }
                 ]
             },
             stage3: {
@@ -785,7 +892,7 @@ const PropertyComparison = () => {
             stage4: {
                 title: "Stage 4: Holding Period",
                 items: [
-                    { label: "Duration", value: `${userSelections.selectedYears} years (${detailedBreakdown.totalHoldingMonths} months)` },
+                    { label: "Duration", value: `${detailedBreakdown.years || 0} years (${detailedBreakdown.totalHoldingMonths} months)` },
                     { label: "Possession", value: `After ${detailedBreakdown.possessionMonths} months` },
                     { label: "Exit Price", value: `₹${userSelections.selectedExitPrice}/sq.ft` },
                     { label: "Sale Value", value: formatCurrency(detailedBreakdown.saleValue) }
@@ -817,8 +924,10 @@ const PropertyComparison = () => {
             ...prev,
             assumptions: {
                 ...prev.assumptions,
-                // FIX: If value is empty, keep it empty. Otherwise parse it.
-                [field]: value === '' ? '' : parseFloat(value)
+                // ✅ FIX: Allow 'homeLoanStartMode' to be stored as text, just like 'holdingPeriodUnit'
+                [field]: (field === 'holdingPeriodUnit' || field === 'homeLoanStartMode')
+                    ? value
+                    : (value === '' ? '' : parseFloat(value))
             }
         }));
     };
@@ -851,7 +960,26 @@ const PropertyComparison = () => {
     };
 
     const handleAddExitPriceScenario = () => {
-        const newPrice = Math.max(...userSelections.scenarioExitPrices) + 1000;
+        let baseline = 0;
+
+        // 1. If scenarios exist, take the max of those
+        if (userSelections.scenarioExitPrices.length > 0) {
+            // Use map/parseFloat to ensure we handle any temporary empty strings safely
+            const existingValues = userSelections.scenarioExitPrices.map(p => parseFloat(p) || 0);
+            baseline = Math.max(...existingValues);
+        }
+        // 2. If no scenarios, take the "Selected Exit Price"
+        else if (userSelections.selectedExitPrice) {
+            baseline = parseFloat(userSelections.selectedExitPrice);
+        }
+        // 3. Fallback to Purchase Price
+        else {
+            baseline = parseFloat(propertyData.purchasePrice) || 0;
+        }
+
+        // Add 500 increment
+        const newPrice = baseline + 500;
+
         setUserSelections(prev => ({
             ...prev,
             scenarioExitPrices: [...prev.scenarioExitPrices, newPrice]
@@ -869,7 +997,7 @@ const PropertyComparison = () => {
 
     const handleUpdateExitPriceScenario = (index, value) => {
         const newPrices = [...userSelections.scenarioExitPrices];
-        newPrices[index] = parseFloat(value) || 0;
+        newPrices[index] = value === '' ? '' : parseFloat(value);
         setUserSelections(prev => ({
             ...prev,
             scenarioExitPrices: newPrices
@@ -1119,7 +1247,11 @@ const PropertyComparison = () => {
         // --- MODIFIED NEXT STEP FUNCTION ---
         const handleNextStep = () => {
             if (validateCurrentStep()) {
+                const nextStep = currentStep + 1;
                 setCurrentStep(prev => Math.min(prev + 1, steps.length));
+
+                // ✅ FIX: Unlock the next step permanently
+                setMaxStepReached(prev => Math.max(prev, nextStep));
             }
         };
 
@@ -1133,14 +1265,17 @@ const PropertyComparison = () => {
             // 1. HANDLER: Controls navigation logic
             const handleStepperClick = (targetStep) => {
                 // A. Moving Backward: Always allow
-                if (targetStep < currentStep) {
-                    setValidationError(''); // Clear any existing errors
+                if (targetStep <= maxStepReached) {
+                    // ✅ FIX: Allow jumping to any previously visited step
+                    // Optional: You might want to validate the current step before leaving it, 
+                    // but usually going back/jumping around unlocked steps is fine.
                     setCurrentStep(targetStep);
                 }
-                // B. Moving Forward (Immediate Next Step): Must Validate first
                 else if (targetStep === currentStep + 1) {
+                    // Standard "Next" behavior logic
                     if (validateCurrentStep()) {
                         setCurrentStep(targetStep);
+                        setMaxStepReached(prev => Math.max(prev, targetStep));
                     }
                 }
                 // C. Jumping Ahead (e.g., Step 1 to Step 3): Block it
@@ -1177,8 +1312,7 @@ const PropertyComparison = () => {
 
                             // 2. LOGIC: Determine if this specific bubble is interactable
                             // Allow clicking previous steps OR the immediate next step only
-                            const isClickable = step.id <= currentStep + 1;
-
+                            const isClickable = step.id <= maxStepReached || step.id === currentStep + 1;
                             return (
                                 <div key={step.id} className="text-center" style={{ width: '100px' }}>
                                     <div
@@ -1387,7 +1521,7 @@ const PropertyComparison = () => {
                                                 <span className="input-group-text">%</span>
                                             </div>
                                             <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-                                                Applied on <b>Base Value</b> of the Property
+                                                Applied on <b>Total Cost</b> of the Property
                                             </small>
                                         </div>
                                         <div className="col-md-6">
@@ -1438,15 +1572,36 @@ const PropertyComparison = () => {
                                                 </span>
                                             </div>
                                         </div>
+                                        {/* Holding Period with Unit Selector */}
                                         <div className="col-md-6">
-                                            <label className="form-label">Holding Period (Years)</label>
-                                            <input
-                                                type="number"
-                                                className="form-control"
-                                                value={propertyData.assumptions.investmentPeriod}
-                                                placeholder={placeholders.investmentPeriod}
-                                                onChange={(e) => handleAssumptionChange('investmentPeriod', e.target.value)}
-                                            />
+                                            <label className="form-label">Holding Period</label>
+                                            <div className="input-group">
+                                                {/* The Number Input */}
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={propertyData.assumptions.investmentPeriod}
+                                                    placeholder={propertyData.assumptions.holdingPeriodUnit === 'months' ? "e.g. 18" : "e.g. 5"}
+                                                    onChange={(e) => handleAssumptionChange('investmentPeriod', e.target.value)}
+                                                />
+
+                                                {/* The Unit Selector Dropdown */}
+                                                <select
+                                                    className="form-select"
+                                                    style={{ maxWidth: '100px', backgroundColor: '#f8f9fa' }}
+                                                    value={propertyData.assumptions.holdingPeriodUnit}
+                                                    onChange={(e) => handleAssumptionChange('holdingPeriodUnit', e.target.value)} // Note: You might need to update handleAssumptionChange to accept string values if it parses everything as float
+                                                >
+                                                    <option value="years">Years</option>
+                                                    <option value="months">Months</option>
+                                                </select>
+                                            </div>
+                                            <small className="text-muted p-2">
+                                                {propertyData.assumptions.holdingPeriodUnit === 'months'
+                                                    ? `${(getSafeValue(propertyData.assumptions.investmentPeriod) / 12).toFixed(1)} Years`
+                                                    : `${getSafeValue(propertyData.assumptions.investmentPeriod) * 12} Months`
+                                                }
+                                            </small>
                                         </div>
                                     </div>
 
@@ -1544,6 +1699,7 @@ const PropertyComparison = () => {
                                         Home Loan Details
                                     </h5>
                                     <div className="row g-3">
+                                        {/* Column 1: Rate (Unchanged) */}
                                         <div className="col-md-3">
                                             <label className="form-label small">Home Loan Rate</label>
                                             <div className="input-group input-group-sm">
@@ -1558,6 +1714,8 @@ const PropertyComparison = () => {
                                                 <span className="input-group-text bg-white text-muted">%</span>
                                             </div>
                                         </div>
+
+                                        {/* Column 2: Term (Unchanged) */}
                                         <div className="col-md-3">
                                             <label className="form-label">Loan Term (Years)</label>
                                             <input
@@ -1568,36 +1726,96 @@ const PropertyComparison = () => {
                                                 onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
                                             />
                                         </div>
+
+                                        {/* ✅ Column 3: NEW Mode Toggle & Inputs */}
                                         <div className="col-md-3">
-                                            <label className="form-label">
-                                                Start After Possession (Current: {propertyData.assumptions.homeLoanStartMonth} months)
-                                                <br />
-                                                <small className="text-muted">Selected: {propertyData.assumptions.homeLoanStartMonth} months</small>
-                                            </label>
-                                            <input
-                                                type="range"
-                                                className="form-range"
-                                                min="0"
-                                                max="240"
-                                                value={propertyData.assumptions.homeLoanStartMonth}
-                                                onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
-                                            />
-                                            <div className="d-flex justify-content-between">
-                                                <small>Month 0</small>
-                                                <small>240 months</small>
+                                            <div className="d-flex justify-content-between align-items-center mb-1">
+                                                <label className="form-label mb-0 small fw-bold">EMI Start Logic</label>
+
+                                                {/* Mode Toggle Buttons */}
+                                                <div className="btn-group btn-group-sm" role="group">
+                                                    <button
+                                                        type="button"
+                                                        className={`btn ${(!propertyData.assumptions.homeLoanStartMode || propertyData.assumptions.homeLoanStartMode === 'default') ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                                        onClick={() => handleAssumptionChange('homeLoanStartMode', 'default')}
+                                                        style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+                                                    >
+                                                        Default
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`btn ${propertyData.assumptions.homeLoanStartMode === 'manual' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                                        onClick={() => handleAssumptionChange('homeLoanStartMode', 'manual')}
+                                                        style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+                                                    >
+                                                        Manual
+                                                    </button>
+                                                </div>
                                             </div>
+
+                                            {/* CONDITIONAL RENDER: Based on Mode */}
+                                            {propertyData.assumptions.homeLoanStartMode === 'manual' ? (
+                                                // Option B: MANUAL MODE
+                                                <div className="mt-2">
+                                                    <input
+                                                        type="number"
+                                                        className="form-control form-control-sm"
+                                                        value={propertyData.assumptions.homeLoanStartMonth}
+                                                        placeholder="e.g. 25"
+                                                        onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                                                    />
+                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                                        Enter exact start month (e.g. 25)
+                                                    </small>
+                                                </div>
+                                            ) : (
+                                                // Option A: DEFAULT MODE
+                                                <div>
+                                                    {/* The Message */}
+                                                    <div className="alert border p-1 mb-2 text-center text-muted" style={{ fontSize: '0.70rem', color: '#666', lineHeight: '1.2' }}>
+                                                        HL EMI starts after Last Demand (Constr. + Delay)
+                                                    </div>
+
+                                                    {/* The Slider */}
+                                                    <label className="form-label small text-muted mb-0" style={{ fontSize: '0.75rem' }}>
+                                                        Delay: <strong>{propertyData.assumptions.homeLoanStartMonth} months</strong>
+                                                    </label>
+                                                    <input
+                                                        type="range"
+                                                        className="form-range"
+                                                        min="0"
+                                                        max="24" // Limit delay to 24 months
+                                                        value={propertyData.assumptions.homeLoanStartMonth || 0}
+                                                        onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
+
+                                        {/* ✅ Column 4: UPDATED Display Logic */}
                                         <div className="col-md-3">
-                                            <div className="p-3 bg-light rounded h-100">
-                                                <small className="text-muted">Actual EMI Start</small>
-                                                <div className="fw-bold">
+                                            <div className="p-3 bg-light rounded h-100 d-flex flex-column justify-content-center border">
+                                                <small className="text-muted text-center" style={{ fontSize: '0.75rem' }}>Actual EMI Start</small>
+                                                <div className="fw-bold text-center fs-5 ">
                                                     Month {
-                                                        (parseInt(propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.possessionMonths) || 0)
-                                                        + (parseInt(propertyData.assumptions.homeLoanStartMonth) || 0)
-                                                        + 1
+                                                        propertyData.assumptions.homeLoanStartMode === 'manual'
+                                                            ? (getSafeValue(propertyData.assumptions.homeLoanStartMonth))
+                                                            : (
+                                                                // Logic: Construction Period + Delay + 1
+                                                                (propertyData.paymentPlan === 'clp'
+                                                                    ? (getSafeValue(propertyData.assumptions.clpDurationYears) * 12)
+                                                                    : (parseInt(propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.possessionMonths) || 0)
+                                                                )
+                                                                + getSafeValue(propertyData.assumptions.homeLoanStartMonth)
+                                                                + 1
+                                                            )
                                                     }
                                                 </div>
-                                                <small className="text-muted">After possession delay</small>
+                                                <small className="text-muted text-center" style={{ fontSize: '0.65rem' }}>
+                                                    {propertyData.assumptions.homeLoanStartMode === 'manual'
+                                                        ? "(User Defined)"
+                                                        : "(Construction + Delay + 1)"}
+                                                </small>
                                             </div>
                                         </div>
                                     </div>
@@ -1806,8 +2024,9 @@ const PropertyComparison = () => {
                                                 type="number"
                                                 className="form-control"
                                                 value={userSelections.selectedExitPrice}
-                                                placeholder='e.g. 3000'
-                                                onChange={(e) => handleSelectionUpdate('selectedExitPrice', parseFloat(e.target.value))}
+                                                placeholder={`e.g. ${(parseFloat(propertyData.purchasePrice) || 5000) + 2500}`}
+                                                // ✅ FIX: Allow empty string deletion without forcing 0
+                                                onChange={(e) => handleSelectionUpdate('selectedExitPrice', e.target.value === '' ? '' : parseFloat(e.target.value))}
                                             />
                                         </div>
 
@@ -2452,7 +2671,7 @@ const PropertyComparison = () => {
                                     "bi-calendar-week",
                                     "primary",
                                     formatCurrency(breakdown.prePossessionTotal),
-                                    `Month 0 to Month ${breakdown.possessionMonths}`,
+                                    `Month 0 to Month ${breakdown.prePossessionMonths}`,
                                     `${breakdown.prePossessionMonths} months`,
                                     <>
 
@@ -2465,6 +2684,7 @@ const PropertyComparison = () => {
                                                         idcSchedule: breakdown.idcSchedule,
                                                         pl1EMI: breakdown.personalLoan1EMI,
                                                         possessionMonths: breakdown.possessionMonths,
+                                                        totalHoldingMonths: breakdown.totalHoldingMonths,
                                                         homeLoanAmount: breakdown.homeLoanAmount,
                                                         interestRate: propertyData.assumptions.homeLoanRate,
                                                         propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name
@@ -2504,6 +2724,7 @@ const PropertyComparison = () => {
                                                             idcSchedule: breakdown.idcSchedule,
                                                             pl1EMI: breakdown.personalLoan1EMI,
                                                             totalIDC: breakdown.totalIDC,
+                                                            totalHoldingMonths: breakdown.totalHoldingMonths,
                                                             propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
                                                             possessionMonths: breakdown.possessionMonths,
                                                             totalPaid: breakdown.prePossessionTotal,
@@ -2560,23 +2781,44 @@ const PropertyComparison = () => {
                                     breakdown.hasIDC && <small className="opacity-75 mt-2 d-block">Click 'View Schedule' to see monthly breakdown</small>
                                 )}
 
-                                {/* Timeline 2: Post-Possession */}
-                                {renderTimelineCard(
-                                    "Timeline 2: Post-Possession",
-                                    "bi-calendar-check",
-                                    "success",
-                                    `${formatCurrency(breakdown.postPossessionEMI)}/month`,
-                                    `Month ${breakdown.possessionMonths + 1} to Month ${breakdown.totalHoldingMonths}`,
-                                    `${breakdown.postPossessionMonths} months`,
-                                    <>
-                                        {renderComponentBox("HL EMI", formatCurrency(breakdown.homeLoanEMI), 4)}
-                                        {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 4)}
-                                        {breakdown.hasPersonalLoan2 &&
-                                            renderComponentBox("PL2 EMI", formatCurrency(breakdown.personalLoan2EMI), 4)
-                                        }
-                                    </>,
-                                    formatCurrency(breakdown.postPossessionTotal),
-                                    `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`
+                                {/* Timeline 2: Post-Possession - ONLY SHOW IF APPLICABLE */}
+                                {breakdown.postPossessionMonths > 0 ? (
+                                    // CASE A: Normal Scenario (Show Card)
+                                    renderTimelineCard(
+                                        "Timeline 2: Post-Possession",
+                                        "bi-calendar-check",
+                                        "success",
+                                        `${formatCurrency(breakdown.postPossessionEMI)}/month`,
+                                        `Month ${breakdown.possessionMonths + 1} to Month ${breakdown.totalHoldingMonths}`,
+                                        `${breakdown.postPossessionMonths} months`,
+                                        <>
+                                            {renderComponentBox("HL EMI", formatCurrency(breakdown.homeLoanEMI), 4)}
+                                            {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 4)}
+                                            {breakdown.hasPersonalLoan2 &&
+                                                renderComponentBox("PL2 EMI", formatCurrency(breakdown.personalLoan2EMI), 4)
+                                            }
+                                        </>,
+                                        formatCurrency(breakdown.postPossessionTotal),
+                                        `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`
+                                    )
+                                ) : (
+                                    // CASE B: Early Exit (Show "Not Applicable" Message)
+                                    <div className="col-md-6">
+                                        <div className="card h-100 border-secondary border-opacity-25 bg-light">
+                                            <div className="card-header bg-secondary bg-opacity-10 text-muted">
+                                                <h6 className="mb-0"><i className="bi bi-slash-circle me-2"></i>Timeline 2: Post-Possession</h6>
+                                            </div>
+                                            <div className="card-body d-flex flex-column align-items-center justify-content-center text-center p-5 opacity-50">
+                                                <div className="display-4 text-muted mb-3"><i className="bi bi-hourglass-bottom"></i></div>
+                                                <h5 className="fw-bold text-muted">Not Applicable</h5>
+                                                <p className="mb-0 small">
+                                                    Your holding period ({breakdown.years} years) ends before or exactly at possession.
+                                                    <br />
+                                                    You will exit this investment before starting post-possession EMIs.
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
                                 )}
                             </div>
 

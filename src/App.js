@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { PropertyComparison } from './components';
 import Auth from './components/Auth';
@@ -19,7 +19,23 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [emailVerified, setEmailVerified] = useState(false);
   const [theme, setTheme] = useState('light'); // Add theme state
-  const [showUserMenu, setShowUserMenu] = useState(false); // State for user dropdown menu
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null); // 1. Create a Ref
+
+  // 2. Add Click Outside Listener
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // If menu is open AND click is NOT inside the menu wrapper
+      if (showUserMenu && userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserMenu]);
 
   // Theme effect - apply theme to document
   useEffect(() => {
@@ -144,296 +160,258 @@ function App() {
     );
   }
 
-  // Main App Content Component
-  const MainAppContent = () => (
-    <div className="App">
-      {/* 🔍 TEMPORARY: Debug banner */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="debug-banner bg-dark text-white py-1 small">
-          <div className="container">
-            <div className="d-flex justify-content-between align-items-center">
-              <div>
-                <i className="fas fa-bug me-1"></i>
-                DEBUG: {process.env.NODE_ENV} |
-                Firebase: {auth?.app?.name || 'Not loaded'} |
-                Env Vars: {process.env.REACT_APP_FIREBASE_API_KEY ? 'Loaded' : 'Missing'} |
-                Theme: {theme}
-              </div>
-              <button
-                className="btn btn-sm btn-outline-light"
-                onClick={() => {
-                  console.log('📊 Current State:', { user, emailVerified, loading, theme });
-                  console.log('🔧 Firebase Auth:', auth);
-                }}
-              >
-                <i className="fas fa-code me-1"></i> Log State
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <header className="app-header" style={{ position: 'relative' }}>
-        <div className="container">
-          <div className="header-content">
-            <div className="logo-title">
-              <img
-                src="/logo_124.png"
-                alt="Property Investment Analyzer Logo"
-                className="app-logo"
-                style={{
-                  height: '75px', // Increased size
-                  width: 'auto',
-                  filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))', // Added elevation/shadow
-                  marginRight: '15px'
-                }}
-              />
-              <div className="title-section">
-                <h1 className="app-title">
-                  Property Investment Analyzer
-                </h1>
-                <p className="app-subtitle">
-                  Compare and analyze property investments with detailed financial breakdowns
-                </p>
-                <div className="environment-badge">
-                  {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
-                  {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT SIDE: Theme Toggle + Mini Weather + User Info */}
-            <div className="d-flex align-items-center gap-3">
-              {/* Theme Toggle */}
-              <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-
-              {/* Mini Weather Widget */}
-              <MiniWeather />
-
-              {/* User Info - Avatar Dropdown */}
-              {user && (
-                <div className="position-relative">
-                  <button
-                    className="btn p-0 border-0 bg-transparent"
-                    onClick={() => setShowUserMenu(!showUserMenu)}
-                    style={{ transition: 'transform 0.2s', outline: 'none' }}
-                    title="User Profile"
-                  >
-                    <div
-                      className="d-flex align-items-center justify-content-center rounded-circle"
-                      style={{
-                        width: '45px',
-                        height: '45px',
-                        border: '2px solid rgba(255,255,255,0.7)', // Outer ring
-                        padding: '3px',
-                        boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
-                      }}
-                    >
-                      <div
-                        className="rounded-circle overflow-hidden bg-light d-flex align-items-center justify-content-center"
-                        style={{ width: '100%', height: '100%' }}
-                      >
-                        <i className="bi bi-person-fill text-secondary" style={{ fontSize: '1.5rem' }}></i>
-                      </div>
-                    </div>
-                  </button>
-
-                  {/* Dropdown Menu */}
-                  {showUserMenu && (
-                    <>
-                      {/* Transparent backdrop to close menu on outside click */}
-                      <div
-                        style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }}
-                        onClick={() => setShowUserMenu(false)}
-                      />
-
-                      {/* Dropdown Content - FIXED STYLES */}
-                      <div
-                        className={`dropdown-menu show position-absolute end-0 mt-2 shadow rounded-3 p-3`}
-                        style={{
-                          width: '280px',
-                          zIndex: 999,
-                          // ✅ FORCE OVERRIDE: Inline styles beat Bootstrap defaults in Prod
-                          backgroundColor: theme === 'dark' ? '#212529' : '#ffffff',
-                          color: theme === 'dark' ? '#ffffff' : '#212529',
-                          border: theme === 'dark' ? '1px solid #495057' : '1px solid rgba(0,0,0,0.15)'
-                        }}
-                      >
-                        <div className="d-flex align-items-center mb-3">
-                          <div
-                            className="rounded-circle p-3 me-3 d-flex align-items-center justify-content-center"
-                            style={{
-                              width: '50px',
-                              height: '50px',
-                              backgroundColor: theme === 'dark' ? 'rgba(13, 110, 253, 0.2)' : 'rgba(13, 110, 253, 0.1)'
-                            }}
-                          >
-                            <i className="bi bi-person-fill text-primary" style={{ fontSize: '1.5rem' }}></i>
-                          </div>
-                          <div className="overflow-hidden">
-                            {/* Removed text-light/dark classes to let it inherit from parent */}
-                            <div className="fw-bold text-truncate">
-                              {user.email?.split('@')[0]}
-                            </div>
-                            <div className={`small text-truncate ${theme === 'dark' ? 'text-secondary' : 'text-muted'}`}>
-                              {user.email}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mb-3">
-                          {emailVerified ? (
-                            <div className="d-flex align-items-center text-success small">
-                              <i className="bi bi-check-circle-fill me-2"></i>
-                              <span>Email Verified</span>
-                            </div>
-                          ) : (
-                            <div className="d-flex align-items-center text-warning small">
-                              <i className="bi bi-exclamation-triangle-fill me-2"></i>
-                              <span>Email Not Verified</span>
-                            </div>
-                          )}
-                        </div>
-
-                        <hr className={`dropdown-divider my-2 ${theme === 'dark' ? 'border-secondary' : ''}`} />
-
-                        <button
-                          onClick={handleSignOut}
-                          className={`btn w-100 btn-sm d-flex align-items-center justify-content-center ${theme === 'dark' ? 'btn-outline-light' : 'btn-outline-danger'}`}
-                        >
-                          <i className="bi bi-box-arrow-right me-2"></i>
-                          Sign Out
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {user && !emailVerified && (
-        <div className="verification-banner bg-warning text-dark py-2">
-          <div className="container">
-            <div className="d-flex justify-content-between align-items-center">
-              <div>
-                <i className="fas fa-exclamation-triangle me-2"></i>
-                Please verify your email address to access all features.
-                Check your inbox for the verification email.
-              </div>
-              <button
-                className="btn btn-sm btn-outline-dark"
-                onClick={() => {
-                  console.log('🔄 Attempting to resend verification email to:', user.email);
-                  alert('Resend verification email function would go here');
-                }}
-              >
-                Resend Email
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <main className="app-main">
-        <div className="container-fluid">
-          {user ? (
-            <>
-              {emailVerified ? (
-                // ✅ FULL WIDTH Property Comparison (no sidebar)
-                <div className="row">
-                  <div className="col-12">
-                    <PropertyComparison />
-                  </div>
-                </div>
-              ) : (
-                <div className="alert alert-warning mt-4">
-                  <h4><i className="fas fa-envelope me-2"></i>Email Verification Required</h4>
-                  <p>
-                    Please verify your email address to access the Property Investment Analyzer.
-                    Check your inbox for the verification link we sent to <strong>{user.email}</strong>.
-                  </p>
-                  <div className="mt-3">
-                    <button
-                      className="btn btn-primary me-2"
-                      onClick={() => {
-                        console.log('🔄 Manual resend requested for:', user.email);
-                      }}
-                    >
-                      <i className="fas fa-redo me-1"></i> Resend Verification Email
-                    </button>
-                    <button
-                      className="btn btn-outline-secondary"
-                      onClick={handleSignOut}
-                    >
-                      <i className="fas fa-sign-out-alt me-1"></i> Sign Out
-                    </button>
-                  </div>
-                </div>
-              )}
-            </>
-          ) : (
-            <div className="row justify-content-center mt-3 mt-md-5">
-              <div className="col-12 col-md-8 col-lg-5 col-xl-4">
-                {/* REMOVED: The outer "Sign In Required" card wrapper.
-                   KEPT: The centered layout and the Auth component itself.
-                */}
-                <Auth />
-
-                {/* Optional footer text kept clean below the form */}
-                <div className="text-center mt-3 text-muted small">
-                  <p>By signing in, you agree to our Terms of Service and Privacy Policy</p>
-                  {process.env.NODE_ENV === 'development' && (
-                    <small className="opacity-50">
-                      Dev Mode | Theme: {theme}
-                    </small>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      </main>
-
-      <footer className="app-footer" style={{ backgroundColor: '#50C878', color: '#FFFFFF' }}>
-        <div className="container text-center py-2"> {/* Added spacing (py-3) and centering */}
-
-          {/* 1. Links (Top & Prominent) */}
-          <div className="mb-3">
-            <a href="#" className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75">Privacy Policy</a>
-            <span className="opacity-25">|</span>
-            <a href="#" className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75">Terms of Service</a>
-            <span className="opacity-25">|</span>
-            <a href="#" className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75">Support</a>
-          </div>
-
-          {/* 2. Copyright (Middle & Distinct) */}
-          <div className="mb-2 opacity-90">
-            <small className="fw-bold" style={{ letterSpacing: '0.5px' }}>
-              © {new Date().getFullYear()} Property Investment Analyzer • All Rights Reserved
-            </small>
-          </div>
-
-          {/* 3. Technical Details (Bottom, Smallest & Faintest) */}
-          <div className="opacity-50" style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
-            v{config.version} • {config.isProduction() ? 'Production' : 'Dev'} Env
-            {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
-          </div>
-        </div>
-      </footer>
-    </div>
-  );
-
   return (
     <Router>
-      <Routes>
-        <Route path="/" element={<MainAppContent />} />
-        <Route path="/verify-email" element={<EmailVerification />} />
-        <Route path="/schedule" element={<IdcSchedulePage />} />
-        <Route path="/monthly-breakdown" element={<MonthlyBreakdownPage />}/>
-      </Routes>
+      <div className="App">
+
+        {/* 1. Header*/}
+        <header className="app-header" style={{ position: 'relative' }}>
+          <div className="container">
+            <div className="header-content">
+              <div className="logo-title">
+                <img
+                  src="/logo_124.png"
+                  alt="Property Investment Analyzer Logo"
+                  className="app-logo"
+                  style={{
+                    height: '75px', // Increased size
+                    width: 'auto',
+                    filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))', // Added elevation/shadow
+                    marginRight: '15px'
+                  }}
+                />
+                <div className="title-section">
+                  <h1 className="app-title">
+                    Property Investment Analyzer
+                  </h1>
+                  <p className="app-subtitle">
+                    Compare and analyze property investments with detailed financial breakdowns
+                  </p>
+                  <div className="environment-badge">
+                    {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
+                    {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT SIDE: Theme Toggle + Mini Weather + User Info */}
+              <div className="d-flex align-items-center gap-3">
+                {/* Theme Toggle */}
+                <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+
+                {/* Mini Weather Widget */}
+                <MiniWeather />
+
+                {/* User Info - Avatar Dropdown */}
+                {user && (
+                  <div className="position-relative" ref={userMenuRef}> {/* <--- Attach Ref Here */}
+
+                    <button
+                      className="btn p-0 border-0 bg-transparent"
+                      onClick={() => setShowUserMenu(!showUserMenu)}
+                      style={{ transition: 'transform 0.2s', outline: 'none' }}
+                      title="User Profile"
+                    >
+                      <div
+                        className="d-flex align-items-center justify-content-center rounded-circle"
+                        style={{
+                          width: '45px',
+                          height: '45px',
+                          border: '2px solid rgba(255,255,255,0.7)',
+                          padding: '3px',
+                          boxShadow: '0 2px 5px rgba(0,0,0,0.1)'
+                        }}
+                      >
+                        <div
+                          className="rounded-circle overflow-hidden bg-light d-flex align-items-center justify-content-center"
+                          style={{ width: '100%', height: '100%' }}
+                        >
+                          <i className="bi bi-person-fill text-secondary" style={{ fontSize: '1.5rem' }}></i>
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* Dropdown Menu */}
+                    {showUserMenu && (
+                      <>
+                        {/* ❌ REMOVED THE BACKDROP DIV FROM HERE */}
+
+                        {/* Dropdown Content */}
+                        <div
+                          className={`dropdown-menu show position-absolute end-0 mt-2 shadow rounded-3 p-3`}
+                          style={{
+                            width: '280px',
+                            zIndex: 999,
+                            backgroundColor: theme === 'dark' ? '#212529' : '#ffffff',
+                            color: theme === 'dark' ? '#ffffff' : '#212529',
+                            border: theme === 'dark' ? '1px solid #495057' : '1px solid rgba(0,0,0,0.15)'
+                          }}
+                        >
+                          {/* ... (Keep your existing dropdown content exactly as it is) ... */}
+                          <div className="d-flex align-items-center mb-3">
+                            <div
+                              className="rounded-circle p-3 me-3 d-flex align-items-center justify-content-center"
+                              style={{
+                                width: '50px',
+                                height: '50px',
+                                backgroundColor: theme === 'dark' ? 'rgba(13, 110, 253, 0.2)' : 'rgba(13, 110, 253, 0.1)'
+                              }}
+                            >
+                              <i className="bi bi-person-fill text-primary" style={{ fontSize: '1.5rem' }}></i>
+                            </div>
+                            <div className="overflow-hidden">
+                              <div className="fw-bold text-truncate">
+                                {user.email?.split('@')[0]}
+                              </div>
+                              <div className={`small text-truncate ${theme === 'dark' ? 'text-secondary' : 'text-muted'}`}>
+                                {user.email}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="mb-3">
+                            {emailVerified ? (
+                              <div className="d-flex align-items-center text-success small">
+                                <i className="bi bi-check-circle-fill me-2"></i>
+                                <span>Email Verified</span>
+                              </div>
+                            ) : (
+                              <div className="d-flex align-items-center text-warning small">
+                                <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                                <span>Email Not Verified</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <hr className={`dropdown-divider my-2 ${theme === 'dark' ? 'border-secondary' : ''}`} />
+
+                          <button
+                            onClick={handleSignOut}
+                            className={`btn w-100 btn-sm d-flex align-items-center justify-content-center ${theme === 'dark' ? 'btn-outline-light' : 'btn-outline-danger'}`}
+                          >
+                            <i className="bi bi-box-arrow-right me-2"></i>
+                            Sign Out
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        {/* 2. Verification Banner (Global) */}
+        {user && !emailVerified && (
+          <div className="verification-banner bg-warning text-dark py-2">
+            <div className="container d-flex justify-content-between align-items-center">
+              <div><i className="fas fa-exclamation-triangle me-2"></i>Please verify your email address.</div>
+              <button className="btn btn-sm btn-outline-dark" onClick={() => alert('Resend functionality here')}>Resend Email</button>
+            </div>
+          </div>
+        )}
+
+        {/* 3. MAIN CONTENT AREA WITH ROUTES */}
+        <main className="app-main">
+          <div className="container-fluid">
+            <Routes>
+              {/* --- ROUTE 1: HOME PAGE (Logic moved here) --- */}
+              <Route path="/" element={
+                user ? (
+                  emailVerified ? (
+                    // Logged in & Verified -> Show Tool
+                    <div className="row"><div className="col-12"><PropertyComparison /></div></div>
+                  ) : (
+                    // Logged in but NOT Verified -> Show Warning
+                    <div className="alert alert-warning mt-4">
+                      <h4><i className="fas fa-envelope me-2"></i>Email Verification Required</h4>
+                      <p>Please verify your email address to access the tool.</p>
+                      <button className="btn btn-outline-secondary mt-3" onClick={handleSignOut}>Sign Out</button>
+                    </div>
+                  )
+                ) : (
+                  // Not Logged in -> Show Login
+                  <div className="row justify-content-center mt-3 mt-md-5">
+                    <div className="col-12 col-md-8 col-lg-5 col-xl-4">
+                      <Auth />
+                      <div className="text-center mt-3 text-muted small"><p>By signing in, you agree to our Terms.</p></div>
+                    </div>
+                  </div>
+                )
+              } />
+
+              {/* --- ROUTE 2: VERIFICATION --- */}
+              <Route path="/verify-email" element={<EmailVerification />} />
+
+              {/* --- ROUTE 3: SCHEDULE --- */}
+              <Route path="/schedule" element={<IdcSchedulePage />} />
+
+              {/* --- ROUTE 4: MONTHLY BREAKDOWN --- */}
+              <Route path="/monthly-breakdown" element={<MonthlyBreakdownPage />} />
+            </Routes>
+          </div>
+        </main>
+
+        {/* 4.<footer>*/}
+        <footer className="app-footer" style={{ backgroundColor: '#50C878', color: '#FFFFFF' }}>
+          <div className="container text-center py-3">
+
+            {/* 1. Links (Top & Prominent) */}
+            <div className="mb-3">
+              {/* Privacy Policy */}
+              <a
+                href="/docs/Privacy Policy.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75"
+              >
+                Privacy Policy
+              </a>
+
+              <span className="opacity-25">|</span>
+
+              {/* Terms of Service */}
+              <a
+                href="/docs/Terms of Service -- PIA.docx.pdf"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75"
+              >
+                Terms of Service
+              </a>
+
+              <span className="opacity-25">|</span>
+
+              {/* Contact Us (Updated Link) */}
+              <a
+                href="https://agenthumsolutions.com/contact/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75"
+              >
+                Contact Us
+              </a>
+            </div>
+
+            {/* 2. Copyright & Company Name */}
+            <div className="mb-2 opacity-90">
+              <small className="fw-bold" style={{ letterSpacing: '0.5px' }}>
+                © {new Date().getFullYear()} Agenthum AI Solutions Pvt. Ltd. • All Rights Reserved
+              </small>
+            </div>
+
+            {/* 3. Tech Details & Phone Number */}
+            <div className="opacity-50" style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
+              <span className="me-3"><i className="bi bi-telephone-fill me-1"></i>+91 955 582 1832</span>
+              <span>
+                v{config.version} • {config.isProduction() ? 'Production' : 'Dev'} Env
+                {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
+              </span>
+            </div>
+          </div>
+        </footer>
+      </div>
     </Router>
   );
 }
