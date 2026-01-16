@@ -1293,12 +1293,12 @@ const PropertyComparison = () => {
                         style={{ cursor: 'pointer' }}
                     >
                         {/* Title (Left) */}
-                        <h5 className={`mb-0 fw-bold ${isOpen ? 'text-muted':''}`}>
+                        <h5 className={`mb-0 fw-bold`}>
                             <i className={`bi ${icon} me-2`}></i>{title}
                         </h5>
 
                         {/* Arrow Icon (Right) */}
-                        <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'} ${isOpen ? 'text-muted' : 'text-muted'}`}></i>
+                        <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'} ${isOpen ? '' : 'text-muted'}`}></i>
                     </div>
 
                     {/* Content (Visible only if open) */}
