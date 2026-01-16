@@ -30,7 +30,7 @@ const INITIAL_PROPERTY_DATA = {
         personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
         personalLoan2Rate: '', personalLoan2Term: 7, personalLoan2StartMonth: 30, personalLoan2Share: 10,
         downPaymentShare: 0,
-        investmentPeriod: '', clpDurationYears: '', bankDisbursementStartMonth: '', bankDisbursementInterval: ''
+        investmentPeriod: '', clpDurationYears: '', bankDisbursementStartMonth: '', bankDisbursementInterval: '', lastBankDisbursementMonth: ''
     }
 };
 
@@ -280,7 +280,8 @@ const PropertyComparison = () => {
     // Inside PropertyComparison component, with other states
     const [validationError, setValidationError] = useState('');
     const location = useLocation();
-
+    // Add this with your other state variables
+    const [showExitLogic, setShowExitLogic] = useState(false);
     // ... existing state definitions ...
     const [activeTab, setActiveTab] = useState(location.state?.returnTab || 'inputs');
     const navigate = useNavigate();
@@ -347,6 +348,16 @@ const PropertyComparison = () => {
         // Else start at Step 1
         return 1;
     });
+    // Tracks which accordion section is currently expanded
+    const [activeAccordion, setActiveAccordion] = useState('prop_mgmt');
+
+    // Reset the accordion to the first section whenever the Step changes
+    useEffect(() => {
+        if (currentStep === 1) setActiveAccordion('prop_mgmt');
+        if (currentStep === 2) setActiveAccordion('pay_plan');
+        if (currentStep === 3) setActiveAccordion('home_loan');
+        if (currentStep === 4) setActiveAccordion('exit_scenarios');
+    }, [currentStep]);
     const [maxStepReached, setMaxStepReached] = useState(() => {
         // Initialize max step same as current step logic
         const savedData = localStorage.getItem('propertyCalc_data');
@@ -372,17 +383,6 @@ const PropertyComparison = () => {
         }
     });
 
-    // ⬇️ NEW: Auto-populate Exit Price when entering Step 4
-    useEffect(() => {
-        if (currentStep === 4) {
-            // Only auto-fill if currently empty or 0, and we have a Purchase Price to work with
-            if ((!userSelections.selectedExitPrice || userSelections.selectedExitPrice === 0) && propertyData.purchasePrice) {
-                const defaultExit = parseFloat(propertyData.purchasePrice) + 2500;
-                setUserSelections(prev => ({ ...prev, selectedExitPrice: defaultExit }));
-            }
-        }
-    }, [currentStep, propertyData.purchasePrice]);
-
     // 2. Analysis Selection State (Load from Local Storage OR use Default)
     const [userSelections, setUserSelections] = useState(() => {
         try {
@@ -393,6 +393,52 @@ const PropertyComparison = () => {
             return INITIAL_USER_SELECTIONS;
         }
     });
+
+    // ⬇️ NEW: Auto-populate Exit Price based on Holding Period logic
+    useEffect(() => {
+        if (currentStep === 4) {
+            const purchasePrice = parseFloat(propertyData.purchasePrice) || 0;
+
+            // Only run if we have a Purchase Price and the Exit Price is currently empty/zero
+            if (purchasePrice > 0 && (!userSelections.selectedExitPrice || userSelections.selectedExitPrice === 0)) {
+
+                // 1. Determine Duration in Years (Handle months/years unit)
+                let years = parseFloat(propertyData.assumptions.investmentPeriod) || 0;
+                if (propertyData.assumptions.holdingPeriodUnit === 'months') {
+                    years = years / 12;
+                }
+
+                // 2. Apply Instructor's Logic Table
+                let increment = 0;
+
+                if (years < 1) {
+                    increment = 500;
+                } else if (years >= 1 && years < 2) {
+                    increment = 1000; // For "1 year"
+                } else if (years >= 2 && years < 3) {
+                    increment = 2000; // For "2 year"
+                } else if (years >= 3 && years < 4) {
+                    increment = 2500; // For "3 year"
+                } else if (years >= 4 && years < 5) {
+                    increment = 3000; // For "4 year"
+                } else {
+                    increment = 3500; // For "=> 5 year"
+                }
+
+                // 3. Set the calculated price
+                setUserSelections(prev => ({
+                    ...prev,
+                    selectedExitPrice: purchasePrice + increment
+                }));
+            }
+        }
+    }, [
+        currentStep,
+        propertyData.purchasePrice,
+        propertyData.assumptions.investmentPeriod,
+        propertyData.assumptions.holdingPeriodUnit,
+        userSelections.selectedExitPrice
+    ]);
 
     // --- EXPORT FUNCTIONALITY ---
 
@@ -547,58 +593,108 @@ const PropertyComparison = () => {
         }
     };
     const calculatedData = useMemo(() => {
+        // New Helper: Handles "Manual" Home Loan Strategy
+        const calculateManualStrategy = (params) => {
+            const {
+                homeLoanAmount,
+                manualStartMonth,
+                possessionMonths,
+                totalHoldingMonths,
+                idcSchedule,
+                hlRate,
+                hlTerm,
+                personalLoan1Amount,
+                personalLoan1EMI, // Pre-calculated
+                assumptions
+            } = params;
 
+            // 1. Calculate Full Fixed EMI
+            let fullHL_EMI = 0;
+            if (homeLoanAmount > 0 && hlTerm > 0) {
+                const r = hlRate / 12 / 100;
+                const n = hlTerm * 12;
+                fullHL_EMI = (homeLoanAmount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+            }
+
+            let runningTotalOutflow = 0;
+            let runningTotalHLPaid = 0;
+            const loopEnd = Math.min(totalHoldingMonths || possessionMonths, possessionMonths);
+
+            // 2. Simple Loop: Payment based on "Start Month"
+            for (let m = 1; m <= loopEnd; m++) {
+                let monthlyHLPayment = 0;
+
+                // Logic: If current month >= user's start month, pay Full EMI.
+                // Before that? Usually 0 (Moratorium) or Interest (Standard).
+                // Based on your requirement ("Only HL EMI"), we assume 0 before start.
+                if (m >= manualStartMonth) {
+                    monthlyHLPayment = fullHL_EMI;
+                }
+
+                runningTotalHLPaid += monthlyHLPayment;
+                runningTotalOutflow += (monthlyHLPayment + personalLoan1EMI);
+            }
+
+            // 3. Return Simplified Data
+            return {
+                totalIDC: 0, // No separate "IDC" cost to show, it's all EMI
+                minIDCEMI: fullHL_EMI, // Min and Max are just the EMI
+                maxIDCEMI: fullHL_EMI,
+                monthlyIDCEMI: fullHL_EMI, // Average is just the EMI
+
+                idcSchedule: idcSchedule,
+
+                // Return the Total Outflow calculated in the loop
+                truePrePossessionTotal: runningTotalOutflow
+            };
+        };
         // 1. Internal Helper: Performs the core financial math
         const calculateFinancials = (propertySize, exitPrice, years) => {
-            // 1. Get inputs including the new stampDuty
+            // ... (Inputs extraction and setup remains the same) ...
             const { purchasePrice, otherCharges, stampDuty, gstPercentage, assumptions, paymentPlan } = propertyData;
 
             const selectedProperty = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)
-                || propertyData.properties[0] // Fallback to first
-                || {};
+                || propertyData.properties[0] || {};
 
             const periodUnit = propertyData.assumptions.holdingPeriodUnit || 'years';
             let totalHoldingMonths;
             if (periodUnit === 'months') {
-                totalHoldingMonths = parseFloat(years) || 0; // Input is already in months
+                totalHoldingMonths = parseFloat(years) || 0;
             } else {
-                totalHoldingMonths = (parseFloat(years) || 0) * 12; // Convert years to months
+                totalHoldingMonths = (parseFloat(years) || 0) * 12;
             }
-            // ✅ FIX: Round to 2 decimal places to prevent long strings (e.g., 0.42 instead of 0.41666...)
+            
             const valYears = totalHoldingMonths / 12;
             const displayYears = Math.round(valYears * 100) / 100;
             const possessionMonths = getSafeValue(selectedProperty?.possessionMonths) || 0;
             const baseCost = propertySize * getSafeValue(purchasePrice);
-            const extraCharges = getSafeValue(otherCharges); // Lumpsum
+            const extraCharges = getSafeValue(otherCharges);
             const agreementValue = baseCost + extraCharges;
             const stampDutyCost = agreementValue * (getSafeValue(stampDuty) / 100);
             const gstCost = agreementValue * (getSafeValue(gstPercentage) / 100);
-
-            // 3. Sum it up
             const totalCost = baseCost;
 
-            // 1. Determine Construction Period (Base)
-            // If CLP, use explicit construction years. If not, fallback to possession months.
             const constructionPeriodMonths = paymentPlan === 'clp'
                 ? (getSafeValue(assumptions.clpDurationYears) * 12)
                 : possessionMonths;
 
-            // 2. Determine Absolute Start Month based on Mode
-            const hlMode = assumptions.homeLoanStartMode || 'default';
-            const hlInputValue = getSafeValue(assumptions.homeLoanStartMonth); // This is either 'Delay' or 'Month'
+            let lastDemandMonth = possessionMonths; 
+            if (paymentPlan === 'clp') {
+                const explicitLast = getSafeValue(assumptions.lastBankDisbursementMonth);
+                const constructionEnd = getSafeValue(assumptions.clpDurationYears) * 12;
+                lastDemandMonth = explicitLast > 0 ? explicitLast : (constructionEnd > 0 ? constructionEnd : possessionMonths);
+            }
 
+            const hlMode = assumptions.homeLoanStartMode || 'default';
+            const hlInputValue = getSafeValue(assumptions.homeLoanStartMonth);
             let realHomeLoanStartMonth;
 
             if (hlMode === 'manual') {
-                // Manual Mode: User defines the exact month
                 realHomeLoanStartMonth = hlInputValue;
             } else {
-                // Default Mode: Construction Period + Delay + 1
-                // User input 'hlInputValue' is treated as the "Delay"
-                realHomeLoanStartMonth = constructionPeriodMonths + hlInputValue + 1;
+                realHomeLoanStartMonth = lastDemandMonth + hlInputValue + 1;
             }
 
-            // Plan Logic
             let homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare;
 
             if (paymentPlan === 'clp') {
@@ -607,14 +703,12 @@ const PropertyComparison = () => {
                 homeLoanShare = 80; personalLoan1Share = 20; personalLoan2Share = 0; downPaymentShare = 0;
             } else if (paymentPlan === '40-60') {
                 homeLoanShare = 60; personalLoan1Share = 40; personalLoan2Share = 0; downPaymentShare = 0;
+            } else if (paymentPlan === 'rtm') {
+                homeLoanShare = 80; personalLoan1Share = 20; personalLoan2Share = 0; downPaymentShare = 0;
             } else {
-                // --- CUSTOM PLAN (UPDATED) ---
-                // Now we read Home Loan directly from state instead of calculating it
                 personalLoan1Share = getSafeValue(assumptions.personalLoan1Share);
                 personalLoan2Share = getSafeValue(assumptions.personalLoan2Share);
                 downPaymentShare = getSafeValue(assumptions.downPaymentShare);
-
-                // UNFREEZING HOME LOAN: Read it from user input, default to 0 if empty
                 homeLoanShare = getSafeValue(assumptions.homeLoanShare);
             }
 
@@ -624,92 +718,151 @@ const PropertyComparison = () => {
             const downPaymentAmount = totalCost * (downPaymentShare / 100);
             const totalCashInvested = downPaymentAmount + personalLoan1Amount + personalLoan2Amount;
 
-            // IDC Logic
+            const totalHomeLoanAtCompletion = homeLoanAmount;
+            const homeLoanEMI = homeLoanAmount > 0 ? calculateEMI(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm) : 0;
+            const personalLoan1EMI = personalLoan1Amount > 0 ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term) : 0;
+            const personalLoan2EMI = personalLoan2Amount > 0 ? calculateEMI(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term) : 0;
+
             const constructionMonths = possessionMonths;
             let totalIDC = 0;
             let monthlyIDCEMI = 0;
             let minIDCEMI = 0;
             let maxIDCEMI = 0;
             let idcSchedule = [];
+            let truePrePossessionTotal = 0;
+            let totalLifetimeInterest = 0;
+            
+            const isManualMode = assumptions.homeLoanStartMode === 'manual';
 
             if (paymentPlan === 'clp' && homeLoanAmount > 0) {
+                
+                // ============================================================
+                // 1. GENERATE SCHEDULE FIRST (Moved OUT of the else block)
+                //    This ensures 'idcSchedule' exists for BOTH strategies.
+                // ============================================================
                 const interval = getSafeValue(assumptions.bankDisbursementInterval) || 3;
+                let rawStart = getSafeValue(assumptions.bankDisbursementStartMonth);
+                let startMonth = (rawStart !== undefined && rawStart !== null && rawStart !== '') ? parseInt(rawStart) : 1;
+                const manualCutoff = getSafeValue(assumptions.lastBankDisbursementMonth);
+                const fundingEndMonth = manualCutoff > 0 ? manualCutoff : possessionMonths;
 
-                // 2. YOUR FORMULA: Calculate Number of Slabs based on Possession Time
-                // Formula: Possession Months / Interval
-                // We use Math.floor to get whole slabs, and Math.max(1, ...) to ensure at least 1 slab exists.
-                const calculatedSlabs = Math.floor(possessionMonths / interval);
+                const calculatedSlabs = Math.floor((fundingEndMonth - startMonth) / interval) + 1;
                 const numberOfSlabs = Math.max(1, calculatedSlabs);
                 const slabAmount = homeLoanAmount / numberOfSlabs;
-
+                const hlRate = getSafeValue(assumptions.homeLoanRate);
 
                 for (let i = 0; i < numberOfSlabs; i++) {
-                    const month = assumptions.bankDisbursementStartMonth + (i * assumptions.bankDisbursementInterval);
+                    const month = startMonth + (i * interval);
+                    if (month <= fundingEndMonth) {
+                        const slabMonthlyInterest = (slabAmount * (hlRate / 100)) / 12;
+                        const duration = Math.max(0, possessionMonths - month);
+                        const thisSlabTotalCost = slabMonthlyInterest * duration;
+                        
+                        idcSchedule.push({
+                            slabNo: i + 1,
+                            releaseMonth: month,
+                            amount: slabAmount,
+                            interestCost: thisSlabTotalCost
+                        });
+                        totalLifetimeInterest += thisSlabTotalCost;
+                    }
+                }
 
-                    if (month <= constructionMonths) {
-                        const monthsTillEnd = (constructionMonths - month) + 1;
-                        if (monthsTillEnd >= 0) {
-                            // 1. Interest for a SINGLE slab
-                            const singleSlabMonthlyInterest = slabAmount * (assumptions.homeLoanRate / 100) / 12;
+                // ============================================================
+                // 2. NOW EXECUTE STRATEGY
+                // ============================================================
+                if (isManualMode) {
+                    // MANUAL:
+                    const manualStart = getSafeValue(assumptions.homeLoanStartMonth); 
+                    const mStart = (manualStart !== undefined && manualStart !== null) ? parseInt(manualStart) : 0;
 
-                            // 2. Cumulative Interest (What you actually pay that month)
-                            // If it's Slab 3 (index 2), you pay for 3 slabs.
-                            const currentTotalMonthlyEMI = singleSlabMonthlyInterest * (i + 1);
+                    const manualResult = calculateManualStrategy({
+                        homeLoanAmount,
+                        manualStartMonth: mStart,
+                        possessionMonths,
+                        totalHoldingMonths,
+                        hlRate: getSafeValue(assumptions.homeLoanRate),
+                        hlTerm: getSafeValue(assumptions.homeLoanTerm),
+                        personalLoan1Amount,
+                        personalLoan1EMI,
+                        assumptions,
+                        idcSchedule: idcSchedule // ✅ Now this contains data!
+                    });
 
-                            // 3. Lifetime Cost of this specific slab
-                            const totalInterestForSlab = singleSlabMonthlyInterest * monthsTillEnd;
+                    totalIDC = manualResult.totalIDC;
+                    minIDCEMI = manualResult.minIDCEMI;
+                    maxIDCEMI = manualResult.maxIDCEMI;
+                    monthlyIDCEMI = manualResult.monthlyIDCEMI;
+                    truePrePossessionTotal = manualResult.truePrePossessionTotal;
+                    // Note: idcSchedule is already updated in memory
+                    
+                } else {
+                    // DEFAULT: Run standard simulation loop for IDC
+                    let cumulativeDisbursement = 0;
+                    let runningTotalIDC = 0;
+                    let runningTotalOutflow = 0;
+                    let isFirstIDCPayment = false;
 
+                    if (startMonth === 0) {
+                        cumulativeDisbursement += slabAmount;
+                    }
 
-                            // Add to Schedule (for the hover table)
-                            idcSchedule.push({
-                                slabNo: i + 1, // Col 1: Slab #
-                                releaseMonth: month, // Col 2: Release Month
-                                timeRemaining: monthsTillEnd,// Col 3: Time Remaining
-                                currentTotalMonthlyEMI: currentTotalMonthlyEMI,
-                                interestCost: totalInterestForSlab // Col 4: Interest Cost (Total for this slab)
-                            });
+                    const hlTerm = getSafeValue(assumptions.homeLoanTerm);
+                    let fullHL_EMI = 0;
+                    if (homeLoanAmount > 0 && hlTerm > 0) {
+                        const r = hlRate / 12 / 100;
+                        const n = hlTerm * 12;
+                        fullHL_EMI = (homeLoanAmount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
+                    }
+
+                    const loopEnd = Math.min(totalHoldingMonths || possessionMonths, possessionMonths);
+
+                    for (let m = 1; m <= loopEnd; m++) {
+                        const isPhase1_IDC = m <= fundingEndMonth;
+                        let monthlyHLComponent = 0;
+
+                        if (isPhase1_IDC) {
+                            const isScheduleMonth = (m >= startMonth) && ((m - startMonth) % interval === 0) && (m !== startMonth);
+                            const isStartMonthTrigger = (startMonth !== 0 && m === startMonth);
+
+                            if ((isScheduleMonth || isStartMonthTrigger) && cumulativeDisbursement < (homeLoanAmount - 10)) {
+                                cumulativeDisbursement += slabAmount;
+                                if (cumulativeDisbursement > homeLoanAmount) cumulativeDisbursement = homeLoanAmount;
+                            }
+
+                            monthlyHLComponent = (cumulativeDisbursement * (hlRate / 100)) / 12;
+                            runningTotalIDC += monthlyHLComponent;
+
+                            if (monthlyHLComponent > 0) {
+                                if (!isFirstIDCPayment) {
+                                    minIDCEMI = monthlyHLComponent;
+                                    isFirstIDCPayment = true;
+                                }
+                                maxIDCEMI = monthlyHLComponent;
+                            }
+                        } else {
+                            monthlyHLComponent = fullHL_EMI;
                         }
+
+                        const monthlyPL1 = personalLoan1Amount > 0 ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term) : 0;
+                        runningTotalOutflow += (monthlyHLComponent + monthlyPL1);
                     }
+
+                    totalIDC = runningTotalIDC;
+                    truePrePossessionTotal = runningTotalOutflow;
+
+                    const activeMonths = Math.min(loopEnd, fundingEndMonth) - startMonth + 1;
+                    monthlyIDCEMI = activeMonths > 0 ? (totalIDC / activeMonths) : 0;
+                    
+                    // Update schedule with calculated interest costs
+                    idcSchedule = idcSchedule.map(slab => ({
+                        ...slab,
+                        interestCost: (slab.amount * (hlRate / 100) / 12) * (possessionMonths - slab.releaseMonth + 1)
+                    }));
                 }
-                const cutoffMonth = Math.min(totalHoldingMonths, possessionMonths);
-                let runningTotalInterest = 0;
-                let observedMin = Infinity;
-                let observedMax = 0;
-                let monthsWithPayment = 0;
-
-                for (let m = 1; m <= cutoffMonth; m++) {
-                    // Find which slabs are active in this specific month 'm'
-                    // A slab is active if its releaseMonth <= current month 'm'
-                    const activeSlabsCount = idcSchedule.filter(s => s.releaseMonth <= m).length;
-
-                    if (activeSlabsCount > 0) {
-                        // Calculate interest for this month: (Slab Amount * Active Slabs) * Rate / 12
-                        const currentMonthInterest = (slabAmount * activeSlabsCount) * (assumptions.homeLoanRate / 100) / 12;
-
-                        runningTotalInterest += currentMonthInterest;
-
-                        // Update Min/Max tracking
-                        if (currentMonthInterest < observedMin) observedMin = currentMonthInterest;
-                        if (currentMonthInterest > observedMax) observedMax = currentMonthInterest;
-                        monthsWithPayment++;
-                    }
-                }
-                // NEW (Correct): Sums up the specific interest cost of each slab
-                totalIDC = runningTotalInterest;
-                minIDCEMI = monthsWithPayment > 0 ? observedMin : 0;
-                maxIDCEMI = observedMax;
-                // Average = Total Paid / Actual Months Held (or Months with payment)
-                monthlyIDCEMI = monthsWithPayment > 0 ? (totalIDC / cutoffMonth) : 0;
-
             }
 
-            const totalHomeLoanAtCompletion = homeLoanAmount;
-
-            // EMI & Outstanding Logic (Using external math helpers)
-            const homeLoanEMI = homeLoanAmount > 0 ? calculateEMI(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm) : 0;
-            const personalLoan1EMI = personalLoan1Amount > 0 ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term) : 0;
-            const personalLoan2EMI = personalLoan2Amount > 0 ? calculateEMI(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term) : 0;
-            // FIX: Add the delay to the possession month (Possession + Delay)
+            // ... (Rest of function remains identical) ...
             const homeLoanPaymentsMade = Math.max(0, totalHoldingMonths - (realHomeLoanStartMonth - 1));
             const pl1PaymentsMade = Math.max(0, totalHoldingMonths - assumptions.personalLoan1StartMonth);
             const pl2PaymentsMade = Math.max(0, totalHoldingMonths - (possessionMonths + assumptions.personalLoan2StartMonth));
@@ -722,99 +875,60 @@ const PropertyComparison = () => {
             const personalLoan2InterestPaid = personalLoan2Amount > 0 ? calculateTotalInterestPaid(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term, pl2PaymentsMade) : 0;
 
             const totalLoanOutstanding = homeLoanOutstanding + personalLoan1Outstanding + personalLoan2Outstanding;
-            // Actual Total Paid based on start dates
-            const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC; // Added totalIDC here for accuracy
+            const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC; 
             const saleValue = propertySize * exitPrice;
             const leftoverCash = saleValue - totalLoanOutstanding;
-            // --- FIX STARTS HERE ---
-
-            // 1. Calculate TRUE Profit:
-            // (Cash In Hand) - (All EMIs Paid) - (Initial Cash Down Payment)
-            // Note: We don't subtract Personal Loan amounts here because their repayment is already counted in 'totalEMIPaid'
             const trueNetProfit = leftoverCash - totalEMIPaid - downPaymentAmount;
-
-            // 2. Calculate Total Cash Out of Pocket:
-            // (Initial Cash Down Payment) + (All Monthly EMIs Paid)
             const totalActualInvestment = downPaymentAmount + totalEMIPaid;
-
-            // 3. Calculate Correct ROI:
             const roi = totalActualInvestment > 0 ? (trueNetProfit / totalActualInvestment) * 100 : 0;
-
-            // Update the return object to use 'trueNetProfit' instead of the old 'netGainLoss'
             const netGainLoss = trueNetProfit;
-
-            // --- FIX ENDS HERE ---
-            //const roi = totalCashInvested > 0 ? (netGainLoss / totalCashInvested) * 100 : 0;
 
             const prePossessionMonths = Math.min(totalHoldingMonths, possessionMonths);
             const postPossessionMonths = Math.max(0, totalHoldingMonths - possessionMonths);
             const prePossessionEMI = personalLoan1EMI + monthlyIDCEMI;
             const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
             const actualIDCPaid = monthlyIDCEMI * prePossessionMonths;
-
             const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + actualIDCPaid;
 
-
             return {
-                // --- Basic Loan & Cost Metrics ---
                 minIDCEMI, maxIDCEMI, idcSchedule, propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
                 homeLoanEMI, personalLoan1EMI, personalLoan2EMI, gstCost,
-
-                // --- Principal Loan Amounts ---
                 homeLoanAmount, personalLoan1Amount, personalLoan2Amount, downPaymentAmount,
                 totalHomeLoanAtCompletion, homeLoanOutstanding, personalLoan1Outstanding, personalLoan2Outstanding,
-
-                // --- Interest Metrics (Duplicates removed from here) ---
-                totalInterestPaid, totalIDC, monthlyIDCEMI,
+                totalInterestPaid, totalIDC: paymentPlan === 'clp' ? totalLifetimeInterest : totalIDC,
+                monthlyIDCEMI,
                 homeLoanInterestPaid, personalLoan1InterestPaid, personalLoan2InterestPaid,
-
-                // --- Total Paid Calculations ---
                 homeLoanEMIPaid: homeLoanEMI * homeLoanPaymentsMade,
                 personalLoan1EMIPaid: personalLoan1EMI * pl1PaymentsMade,
                 personalLoan2EMIPaid: personalLoan2EMI * pl2PaymentsMade,
                 totalEMIPaid, homeLoanPaymentsMade, pl1PaymentsMade, pl2PaymentsMade,
-
-                // --- Profit & Sale Metrics ---
                 saleValue, leftoverCash, stampDutyCost, netGainLoss, roi, exitPrice,
-
-                // --- Plan Shares ---
                 homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare,
-
-                // --- Display Helpers ---
-                years: displayYears, // (Kept this one, removed the duplicate 'years')
-
-                // --- Booleans ---
+                years: displayYears,
                 hasHomeLoan: homeLoanAmount > 0,
                 hasPersonalLoan1: personalLoan1Amount > 0,
                 hasPersonalLoan2: personalLoan2Amount > 0,
                 hasDownPayment: downPaymentAmount > 0,
                 hasIDC: totalIDC > 0,
-
-                // --- Timing & Breakdown Details ---
                 homeLoanStartMonth: realHomeLoanStartMonth,
                 pl1StartMonth: assumptions.personalLoan1StartMonth,
                 pl2StartMonth: possessionMonths,
                 homeLoanSelectedMonths: assumptions.homeLoanStartMonth,
                 pl1SelectedMonths: assumptions.personalLoan1StartMonth,
                 pl2SelectedMonths: assumptions.personalLoan2StartMonth,
-
                 possessionMonths: possessionMonths,
                 totalHoldingMonths,
-
-                // --- Pre/Post Possession Split ---
                 prePossessionMonths,
                 postPossessionMonths,
                 prePossessionEMI,
                 postPossessionEMI,
-                prePossessionTotal: prePossessionEMI * prePossessionMonths,
+                prePossessionTotal: (paymentPlan === 'clp' && truePrePossessionTotal > 0) ? truePrePossessionTotal : (prePossessionEMI * prePossessionMonths),
                 postPossessionTotal: postPossessionEMI * postPossessionMonths,
-
                 prePossessionComponents: {
                     pl1EMI: personalLoan1EMI,
                     monthlyIDCEMI,
                     total: prePossessionEMI
                 },
-
                 constructionMonths: paymentPlan === 'clp' ? assumptions.clpDurationYears * 12 : 0
             };
         };
@@ -1163,6 +1277,41 @@ const PropertyComparison = () => {
             getSafeValue(propertyData.assumptions.personalLoan1Share) +
             getSafeValue(propertyData.assumptions.personalLoan2Share);
 
+        // Helper: Renders a collapsible accordion section
+        const renderAccordionSection = (id, title, icon, content) => {
+            const isOpen = activeAccordion === id;
+
+            return (
+                // CHANGE 1: Used 'glass-card' as the main wrapper. Removed standard 'card' borders.
+                <div className="glass-card mb-3">
+
+                    {/* Header (Clickable) */}
+                    <div
+                        className="card-header border-0 py-3 cursor-pointer d-flex justify-content-between align-items-center bg-transparent"
+                        // ✅ FIX 1: Toggle Logic - If it's already open, set state to empty string '' (close it), otherwise open 'id'
+                        onClick={() => setActiveAccordion(isOpen ? '' : id)}
+                        style={{ cursor: 'pointer' }}
+                    >
+                        {/* Title (Left) */}
+                        <h5 className={`mb-0 fw-bold ${isOpen ? 'text-white' : ''}`}>
+                            <i className={`bi ${icon} me-2`}></i>{title}
+                        </h5>
+
+                        {/* Arrow Icon (Right) */}
+                        <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'} ${isOpen ? 'text-white' : 'text-muted'}`}></i>
+                    </div>
+
+                    {/* Content (Visible only if open) */}
+                    {isOpen && (
+                        // CHANGE 3: Removed 'bg-white'. Added a subtle top border for separation.
+                        <div className="card-body p-4 border-top border-secondary border-opacity-10 animate-fade-in">
+                            {content}
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
         const validateCurrentStep = () => {
             let isValid = true;
             let errorMsg = '';
@@ -1187,15 +1336,6 @@ const PropertyComparison = () => {
                         getSafeValue(propertyData.assumptions.homeLoanShare);
                     if (total !== 100) { isValid = false; errorMsg = `Total allocation is ${total}%. It must be exactly 100%.`; }
                 }
-            }
-            else if (currentStep === 3) {
-                // ✅ FIX: Check CURRENT PROPERTY possession, NOT assumptions.possessionMonths
-                if (isEmpty(currentProp?.possessionMonths) && propertyData.paymentPlan !== 'rtm') {
-                    isValid = false; errorMsg = 'Please enter Estimated Possession Months (in Step 1).';
-                }
-                else if (isEmpty(propertyData.assumptions.homeLoanRate)) { isValid = false; errorMsg = 'Please enter Home Loan Rate.'; }
-                else if (isEmpty(propertyData.assumptions.homeLoanTerm)) { isValid = false; errorMsg = 'Please enter Home Loan Term.'; }
-
                 if (propertyData.paymentPlan === 'clp') {
                     if (isEmpty(propertyData.assumptions.clpDurationYears)) {
                         isValid = false; errorMsg = 'Please enter Construction Duration.';
@@ -1214,6 +1354,14 @@ const PropertyComparison = () => {
                         }
                     }
                 }
+            }
+            else if (currentStep === 3) {
+                // ✅ FIX: Check CURRENT PROPERTY possession, NOT assumptions.possessionMonths
+                if (isEmpty(currentProp?.possessionMonths) && propertyData.paymentPlan !== 'rtm') {
+                    isValid = false; errorMsg = 'Please enter Estimated Possession Months (in Step 1).';
+                }
+                else if (isEmpty(propertyData.assumptions.homeLoanRate)) { isValid = false; errorMsg = 'Please enter Home Loan Rate.'; }
+                else if (isEmpty(propertyData.assumptions.homeLoanTerm)) { isValid = false; errorMsg = 'Please enter Home Loan Term.'; }
             }
             else if (currentStep === 4) {
                 const selectedPrice = userSelections.selectedExitPrice;
@@ -1424,267 +1572,395 @@ const PropertyComparison = () => {
                     <div className="px-lg-5 mt-5">
                         {renderStepper()}
                     </div>
-                    <div className="card-body pt-4 pe-4">
+                    <div className="card-body p-4">
 
                         {/* Property Management */}
                         {currentStep === 1 && (
                             <div className="animate-fade-in">
-                                {/* 1. Property Management Section */}
-                                <div className="mb-4 ps-4">
-                                    <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
-                                        <i className="bi bi-building me-2"></i>Property Management
-                                    </h5>
-                                    <div className="d-flex justify-content-between align-items-center mb-3">
-                                        <h6 className="mb-0">Properties ({propertyData.properties.length})</h6>
-                                        <button className="btn btn-success btn-sm" onClick={handleAddProperty}>
-                                            <i className="bi bi-plus-circle me-1"></i> Add Property
-                                        </button>
-                                    </div>
-                                    <div className="row g-3">
-                                        {propertyData.properties.map((property, index) => (
-                                            <div key={property.id} className="col-md-6 col-lg-4">
-                                                <div className="card h-100 shadow-sm border-0">
-                                                    <div className="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                                                        <span className="badge bg-primary px-3 py-2">Property #{property.id}</span>
-                                                        {propertyData.properties.length > 1 && (
-                                                            <button className="btn btn-outline-danger btn-sm rounded-circle" onClick={() => handleRemoveProperty(property.id)} style={{ width: '32px', height: '32px', padding: 0 }}>
-                                                                <i className="bi bi-trash"></i>
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <div className="card-body p-4">
-                                                        {renderPropertyInput(index, property, "Property Name", "name", "text")}
-                                                        {renderPropertyInput(index, property, "Location", "location", "text")}
-                                                        <div className="row">
-                                                            <div className="col-md-6">{renderPropertyInput(index, property, "Size (sq.ft)", "size", "number")}</div>
-                                                            <div className="col-md-6">{renderPropertyInput(index, property, "Possession (Months)", "possessionMonths", "number", "Months until possession")}</div>
+                                {/* 1. Property Management Section (Accordion) */}
+                                {renderAccordionSection(
+                                    'prop_mgmt',
+                                    'Property Management',
+                                    'bi-building',
+                                    (
+                                        <>
+                                            {/* Header inside the accordion content */}
+                                            <div className="d-flex justify-content-between align-items-center mb-3">
+                                                <h6 className="mb-0 text-muted">Properties ({propertyData.properties.length})</h6>
+                                                <button className="btn btn-success btn-sm" onClick={handleAddProperty}>
+                                                    <i className="bi bi-plus-circle me-1"></i> Add Property
+                                                </button>
+                                            </div>
+
+                                            {/* Property Cards Grid */}
+                                            <div className="row g-3">
+                                                {propertyData.properties.map((property, index) => (
+                                                    <div key={property.id} className="col-12 col-md-6 col-lg-5 col-xl-4">
+                                                        <div className="card h-100 shadow-sm border-2">
+                                                            <div className="card-header bg-white d-flex justify-content-between align-items-center py-2">
+                                                                <span className="badge bg-primary px-3 py-2">Property #{property.id}</span>
+                                                                {propertyData.properties.length > 1 && (
+                                                                    <button
+                                                                        className="btn btn-outline-danger btn-sm rounded-circle"
+                                                                        onClick={() => handleRemoveProperty(property.id)}
+                                                                        style={{ width: '32px', height: '32px', padding: 0 }}
+                                                                    >
+                                                                        <i className="bi bi-trash"></i>
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                            <div className="card-body p-3">
+                                                                {renderPropertyInput(index, property, "Property Name", "name", "text")}
+                                                                {renderPropertyInput(index, property, "Location", "location", "text")}
+                                                                <div className="row">
+                                                                    <div className="col-md-6">
+                                                                        {renderPropertyInput(index, property, "Size (sq.ft)", "size", "number")}
+                                                                    </div>
+                                                                    <div className="col-md-6">
+                                                                        {renderPropertyInput(index, property, "Possession (Months)", "possessionMonths", "number", "Months until possession")}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* 2. Common Property Information Section */}
-                                <div className="mb-4 ps-4 pe-4">
-                                    <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
-                                        <i className="bi bi-info-circle me-2"></i>Common Property Information
-                                    </h5>
-                                    <div className="row g-3">
-                                        <div className="col-md-6">
-                                            <label className="form-label">Purchase Price (₹/sq.ft)</label>
-                                            <input type="number" className="form-control" value={propertyData.purchasePrice} placeholder="e.g. 5000" onChange={(e) => handleInputChange('purchasePrice', parseFloat(e.target.value))} />
-                                        </div>
-                                        <div className="col-md-6">
-                                            <label className="form-label">Other Charges (Lumpsum)</label>
-                                            <input type="number" className="form-control" value={propertyData.otherCharges} placeholder="e.g. 500000" onChange={(e) => handleInputChange('otherCharges', parseFloat(e.target.value))} />
-                                            <small className="text-muted" style={{ fontSize: '0.75rem' }}>Parking, Club Membership, etc.</small>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <label className="form-label">Stamp Duty (%)</label>
-                                            <div className="input-group">
-                                                <input type="number" className="form-control" value={propertyData.stampDuty} placeholder="e.g. 5" min="0" max="100" onChange={(e) => handleInputChange('stampDuty', parseFloat(e.target.value))} />
-                                                <span className="input-group-text">%</span>
-                                            </div>
-                                            <small className="text-muted" style={{ fontSize: '0.75rem' }}>Govt. registration charges (usually 5-8%)</small>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <label className="form-label">Select Property for Analysis</label>
-                                            <select className="form-select" value={userSelections.selectedPropertyId} onChange={(e) => {
-                                                const propId = parseInt(e.target.value);
-                                                handleSelectionUpdate('selectedPropertyId', propId);
-                                                const selectedProp = propertyData.properties.find(p => p.id === propId);
-                                                if (selectedProp) handleSelectionUpdate('selectedPropertySize', selectedProp.size);
-                                            }}>
-                                                {propertyData.properties.map(property => (
-                                                    <option key={property.id} value={property.id}>{property.name} ({property.size} sq.ft)</option>
                                                 ))}
-                                            </select>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div className="mb-4 ps-4 pe-4">
-                                    <div className="row g-3">
-                                        <div className="col-md-6">
-                                            <label className="form-label">GST Percentage</label>
-                                            <div className="input-group">
+                                            </div>
+                                        </>
+                                    )
+                                )}
+
+                                {/* 2. Common Property Information Section (Accordion) */}
+                                {renderAccordionSection(
+                                    'common_info',
+                                    'Common Property Information',
+                                    'bi-info-circle',
+                                    (
+                                        <div className="row g-3">
+                                            {/* Row 1: Basic Pricing */}
+                                            <div className="col-md-6">
+                                                <label className="form-label">Purchase Price (₹/sq.ft)</label>
                                                 <input
                                                     type="number"
                                                     className="form-control"
-                                                    value={propertyData.gstPercentage}
-                                                    placeholder="e.g. 5 or 12"
-                                                    min="0"
-                                                    max="28"
-                                                    onChange={(e) => handleInputChange('gstPercentage', parseFloat(e.target.value))}
+                                                    value={propertyData.purchasePrice}
+                                                    placeholder="e.g. 5000"
+                                                    onChange={(e) => handleInputChange('purchasePrice', parseFloat(e.target.value))}
                                                 />
-                                                <span className="input-group-text">%</span>
                                             </div>
-                                            <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-                                                Applied on <b>Total Cost</b> of the Property
-                                            </small>
-                                        </div>
-                                        <div className="col-md-6">
-                                            <label className="form-label">Calculated GST Amount</label>
-                                            <div className="form-control bg-light text-secondary">
-                                                {/* Calculate display value on the fly based on inputs */}
-                                                {(() => {
-                                                    const size = userSelections.selectedPropertySize || 0;
-                                                    const price = getSafeValue(propertyData.purchasePrice);
-                                                    const others = getSafeValue(propertyData.otherCharges);
-                                                    const gst = getSafeValue(propertyData.gstPercentage);
-                                                    const totalVal = (size * price) + others;
-                                                    return formatCurrency(totalVal * (gst / 100));
-                                                })()}
+                                            <div className="col-md-6">
+                                                <label className="form-label">Other Charges (Lumpsum)</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={propertyData.otherCharges}
+                                                    placeholder="e.g. 500000"
+                                                    onChange={(e) => handleInputChange('otherCharges', parseFloat(e.target.value))}
+                                                />
+                                                <small className="text-muted" style={{ fontSize: '0.75rem' }}>Parking, Club Membership, etc.</small>
+                                            </div>
+                                            <div className="col-md-6">
+                                                <label className="form-label">Stamp Duty (%)</label>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        className="form-control"
+                                                        value={propertyData.stampDuty}
+                                                        placeholder="e.g. 5"
+                                                        min="0"
+                                                        max="100"
+                                                        onChange={(e) => handleInputChange('stampDuty', parseFloat(e.target.value))}
+                                                    />
+                                                    <span className="input-group-text">%</span>
+                                                </div>
+                                                <small className="text-muted" style={{ fontSize: '0.75rem' }}>Govt. registration charges (usually 5-8%)</small>
+                                            </div>
+                                            <div className="col-md-6">
+                                                <label className="form-label">Select Property for Analysis</label>
+                                                <select
+                                                    className="form-select"
+                                                    value={userSelections.selectedPropertyId}
+                                                    onChange={(e) => {
+                                                        const propId = parseInt(e.target.value);
+                                                        handleSelectionUpdate('selectedPropertyId', propId);
+                                                        const selectedProp = propertyData.properties.find(p => p.id === propId);
+                                                        if (selectedProp) handleSelectionUpdate('selectedPropertySize', selectedProp.size);
+                                                    }}
+                                                >
+                                                    {propertyData.properties.map(property => (
+                                                        <option key={property.id} value={property.id}>{property.name} ({property.size} sq.ft)</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            {/* Divider Line */}
+                                            <div className="col-12">
+                                                <hr className="text-secondary opacity-25 my-2" />
+                                            </div>
+
+                                            {/* Row 2: GST Details */}
+                                            <div className="col-md-6">
+                                                <label className="form-label">GST Percentage</label>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        className="form-control"
+                                                        value={propertyData.gstPercentage}
+                                                        placeholder="e.g. 5 or 12"
+                                                        min="0"
+                                                        max="28"
+                                                        onChange={(e) => handleInputChange('gstPercentage', parseFloat(e.target.value))}
+                                                    />
+                                                    <span className="input-group-text">%</span>
+                                                </div>
+                                                <small className="text-muted" style={{ fontSize: '0.75rem' }}>
+                                                    Applied on <b>Total Cost</b> of the Property
+                                                </small>
+                                            </div>
+                                            <div className="col-md-6">
+                                                <label className="form-label">Calculated GST Amount</label>
+                                                <div className="form-control bg-light text-secondary">
+                                                    {/* Calculate display value on the fly based on inputs */}
+                                                    {(() => {
+                                                        const size = userSelections.selectedPropertySize || 0;
+                                                        const price = getSafeValue(propertyData.purchasePrice);
+                                                        const others = getSafeValue(propertyData.otherCharges);
+                                                        const gst = getSafeValue(propertyData.gstPercentage);
+                                                        const totalVal = (size * price) + others;
+                                                        return formatCurrency(totalVal * (gst / 100));
+                                                    })()}
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    )
+                                )}
                             </div>
                         )}
 
                         {/* === STEP 2: PAYMENT PLAN === */}
                         {currentStep === 2 && (
                             <div className="animate-fade-in ps-4">
-                                <h5 className="fw-bold mb-4 pb-2 border-bottom border-secondary border-opacity-25">
-                                    <i className="bi bi-credit-card me-2"></i>Payment Plan
-                                </h5>
-
-                                <div className="mb-4 ps-4 pe-4">
-                                    <div className="row g-3">
-                                        <div className="col-md-6">
-                                            <label className="form-label">Payment Plan Type</label>
-                                            <div className="input-group">
-                                                <select
-                                                    className="form-select"
-                                                    style={{ backgroundImage: 'none' }}
-                                                    value={propertyData.paymentPlan}
-                                                    onChange={(e) => handlePaymentPlanChange(e.target.value)}
-                                                >
-                                                    <option value="clp">CLP (Construction Linked Plan)</option>
-                                                    <option value="80-20">80%-20% (80% HL, 20% Self)</option>
-                                                    <option value="25-75">25%-75% (75% HL, 25% Self)</option>
-                                                    <option value="rtm">Ready to move</option>
-                                                    <option value="custom">Custom (User Defined)</option>
-                                                </select>
-                                                <span className="input-group-text bg-white text-secondary border-start-0">
-                                                    <i className="bi bi-chevron-down"></i>
-                                                </span>
-                                            </div>
-                                        </div>
-                                        {/* Holding Period with Unit Selector */}
-                                        <div className="col-md-6">
-                                            <label className="form-label">Holding Period</label>
-                                            <div className="input-group">
-                                                {/* The Number Input */}
-                                                <input
-                                                    type="number"
-                                                    className="form-control"
-                                                    value={propertyData.assumptions.investmentPeriod}
-                                                    placeholder={propertyData.assumptions.holdingPeriodUnit === 'months' ? "e.g. 18" : "e.g. 5"}
-                                                    onChange={(e) => handleAssumptionChange('investmentPeriod', e.target.value)}
-                                                />
-
-                                                {/* The Unit Selector Dropdown */}
-                                                <select
-                                                    className="form-select"
-                                                    style={{ maxWidth: '100px', backgroundColor: '#f8f9fa' }}
-                                                    value={propertyData.assumptions.holdingPeriodUnit}
-                                                    onChange={(e) => handleAssumptionChange('holdingPeriodUnit', e.target.value)} // Note: You might need to update handleAssumptionChange to accept string values if it parses everything as float
-                                                >
-                                                    <option value="years">Years</option>
-                                                    <option value="months">Months</option>
-                                                </select>
-                                            </div>
-                                            <small className="text-muted p-2">
-                                                {propertyData.assumptions.holdingPeriodUnit === 'months'
-                                                    ? `${(getSafeValue(propertyData.assumptions.investmentPeriod) / 12).toFixed(1)} Years`
-                                                    : `${getSafeValue(propertyData.assumptions.investmentPeriod) * 12} Months`
-                                                }
-                                            </small>
-                                        </div>
-                                    </div>
-
-                                    {/* Custom Payment Plan Options */}
-                                    {propertyData.paymentPlan === 'custom' && (
-                                        <div className="mt-4 p-3 bg-light rounded">
-                                            <h6 className="fw-bold mb-3">
-                                                <i className="bi bi-sliders me-2"></i>
-                                                Custom Payment Plan Configuration
-                                            </h6>
+                                {/* 1. Payment Plan Section (Accordion) */}
+                                {renderAccordionSection(
+                                    'pay_plan',
+                                    'Payment Plan',
+                                    'bi-credit-card',
+                                    (
+                                        <>
                                             <div className="row g-3">
-                                                <div className="col-md-3">
-                                                    <label className="form-label">Down Payment (%)</label>
-                                                    <input
-                                                        type="number"
-                                                        className="form-control"
-                                                        min="0"
-                                                        max="100"
-                                                        value={propertyData.assumptions.downPaymentShare}
-                                                        placeholder={placeholders.investmentPeriod}
-                                                        onChange={(e) => handleAssumptionChange('downPaymentShare', e.target.value)}
-                                                    />
-                                                    <small className="text-muted">Cash payment (no loan)</small>
-                                                </div>
-                                                <div className="col-md-3">
-                                                    <label className="form-label">Home Loan (%)</label>
-                                                    <input
-                                                        type="number"
-                                                        className="form-control"
-                                                        min="0"
-                                                        max="80"
-                                                        value={propertyData.assumptions.homeLoanShare}
-                                                        placeholder="e.g. 80"
-                                                        onChange={(e) => handleAssumptionChange('homeLoanShare', e.target.value)}
-                                                    />
-                                                    <small className="text-muted">Bank Funding (Max 80%)</small>
-                                                </div>
-                                                <div className="col-md-3">
-                                                    <label className="form-label">Personal Loan 1 (%)</label>
-                                                    <input
-                                                        type="number"
-                                                        className="form-control"
-                                                        min="0"
-                                                        max="100"
-                                                        value={propertyData.assumptions.personalLoan1Share}
-                                                        placeholder={placeholders.investmentPeriod}
-                                                        onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div className="col-md-3">
-                                                    <label className="form-label">Personal Loan 2 (%)</label>
-                                                    <input
-                                                        type="number"
-                                                        className="form-control"
-                                                        min="0"
-                                                        max="100"
-                                                        value={propertyData.assumptions.personalLoan2Share}
-                                                        placeholder={placeholders.investmentPeriod}
-                                                        onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
-                                                    />
-                                                </div>
-                                            </div>
-
-                                            {isError && (
-                                                <div className="mt-3 alert alert-danger">
-                                                    <small>
-                                                        <i className="bi bi-exclamation-triangle-fill me-2"></i>
-                                                        <strong>Error:</strong> Your inputs total {userDefinedTotal}%. They cannot exceed 100%.
-                                                    </small>
-                                                </div>
-                                            )}
-
-                                            {!isError && (
-                                                <div className="mt-3 alert alert-info">
-                                                    <div className="d-flex justify-content-between">
-                                                        <small><i className="bi bi-check-circle me-2"></i>Total Allocation</small>
-                                                        <small className="fw-bold">{currentTotal}%</small>
+                                                <div className="col-md-6">
+                                                    <label className="form-label">Payment Plan Type</label>
+                                                    <div className="input-group">
+                                                        <select
+                                                            className="form-select"
+                                                            style={{ backgroundImage: 'none' }}
+                                                            value={propertyData.paymentPlan}
+                                                            onChange={(e) => handlePaymentPlanChange(e.target.value)}
+                                                        >
+                                                            <option value="clp">CLP (Construction Linked Plan)</option>
+                                                            <option value="80-20">80%-20% (80% HL, 20% Self)</option>
+                                                            <option value="25-75">25%-75% (75% HL, 25% Self)</option>
+                                                            <option value="rtm">Ready to move</option>
+                                                            <option value="custom">Custom (User Defined)</option>
+                                                        </select>
+                                                        <span className="input-group-text bg-white text-secondary border-start-0">
+                                                            <i className="bi bi-chevron-down"></i>
+                                                        </span>
                                                     </div>
                                                 </div>
+
+                                                {/* Holding Period with Unit Selector */}
+                                                <div className="col-md-6">
+                                                    <label className="form-label">Holding Period</label>
+                                                    <div className="input-group">
+                                                        <input
+                                                            type="number"
+                                                            className="form-control"
+                                                            value={propertyData.assumptions.investmentPeriod}
+                                                            placeholder={propertyData.assumptions.holdingPeriodUnit === 'months' ? "e.g. 18" : "e.g. 5"}
+                                                            onChange={(e) => handleAssumptionChange('investmentPeriod', e.target.value)}
+                                                        />
+                                                        <select
+                                                            className="form-select"
+                                                            style={{ maxWidth: '100px', backgroundColor: '#f8f9fa' }}
+                                                            value={propertyData.assumptions.holdingPeriodUnit}
+                                                            onChange={(e) => handleAssumptionChange('holdingPeriodUnit', e.target.value)}
+                                                        >
+                                                            <option value="years">Years</option>
+                                                            <option value="months">Months</option>
+                                                        </select>
+                                                    </div>
+                                                    <small className="text-muted p-2">
+                                                        {propertyData.assumptions.holdingPeriodUnit === 'months'
+                                                            ? `${(getSafeValue(propertyData.assumptions.investmentPeriod) / 12).toFixed(1)} Years`
+                                                            : `${getSafeValue(propertyData.assumptions.investmentPeriod) * 12} Months`
+                                                        }
+                                                    </small>
+                                                </div>
+                                            </div>
+
+                                            {/* Custom Payment Plan Options */}
+                                            {propertyData.paymentPlan === 'custom' && (
+                                                <div className="mt-4 p-3 bg-light rounded border border-light">
+                                                    <h6 className="fw-bold mb-3 small text-uppercase text-muted">
+                                                        <i className="bi bi-sliders me-2"></i>
+                                                        Custom Configuration
+                                                    </h6>
+                                                    <div className="row g-3">
+                                                        <div className="col-md-3">
+                                                            <label className="form-label">Down Payment (%)</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-control"
+                                                                min="0"
+                                                                max="100"
+                                                                value={propertyData.assumptions.downPaymentShare}
+                                                                placeholder={placeholders.investmentPeriod}
+                                                                onChange={(e) => handleAssumptionChange('downPaymentShare', e.target.value)}
+                                                            />
+                                                            <small className="text-muted">Cash payment (no loan)</small>
+                                                        </div>
+                                                        <div className="col-md-3">
+                                                            <label className="form-label">Home Loan (%)</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-control"
+                                                                min="0"
+                                                                max="80"
+                                                                value={propertyData.assumptions.homeLoanShare}
+                                                                placeholder="e.g. 80"
+                                                                onChange={(e) => handleAssumptionChange('homeLoanShare', e.target.value)}
+                                                            />
+                                                            <small className="text-muted">Bank Funding (Max 80%)</small>
+                                                        </div>
+                                                        <div className="col-md-3">
+                                                            <label className="form-label">Personal Loan 1 (%)</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-control"
+                                                                min="0"
+                                                                max="100"
+                                                                value={propertyData.assumptions.personalLoan1Share}
+                                                                placeholder={placeholders.investmentPeriod}
+                                                                onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div className="col-md-3">
+                                                            <label className="form-label">Personal Loan 2 (%)</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-control"
+                                                                min="0"
+                                                                max="100"
+                                                                value={propertyData.assumptions.personalLoan2Share}
+                                                                placeholder={placeholders.investmentPeriod}
+                                                                onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    {isError && (
+                                                        <div className="mt-3 alert alert-danger mb-0">
+                                                            <small>
+                                                                <i className="bi bi-exclamation-triangle-fill me-2"></i>
+                                                                <strong>Error:</strong> Your inputs total {userDefinedTotal}%. They cannot exceed 100%.
+                                                            </small>
+                                                        </div>
+                                                    )}
+
+                                                    {!isError && (
+                                                        <div className="mt-3 alert alert-info mb-0 py-2">
+                                                            <div className="d-flex justify-content-between align-items-center">
+                                                                <small><i className="bi bi-check-circle me-2"></i>Total Allocation</small>
+                                                                <small className="fw-bold">{currentTotal}%</small>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
-                                        </div>
-                                    )}
-                                </div>
+                                        </>
+                                    )
+                                )}
+
+                                {/* Header 2: CLP Construction Details (Accordion - Conditional) */}
+                                {propertyData.paymentPlan === 'clp' && (
+                                    renderAccordionSection(
+                                        'clp_details',
+                                        'CLP Construction Details',
+                                        'bi-building',
+                                        (
+                                            <>
+                                                {/* Row 1: Duration & Interval */}
+                                                <div className="row g-3 mb-3">
+                                                    <div className="col-md-6">
+                                                        <label className="form-label">Construction Duration (Years)</label>
+                                                        <input
+                                                            type="number"
+                                                            step="0.5"
+                                                            className="form-control"
+                                                            value={propertyData.assumptions.clpDurationYears}
+                                                            placeholder={placeholders.clpDurationYears}
+                                                            onChange={(e) => handleAssumptionChange('clpDurationYears', e.target.value)}
+                                                        />
+                                                        <small className="text-muted">Total construction period</small>
+                                                    </div>
+                                                    <div className="col-md-6">
+                                                        <label className="form-label">Disbursement Interval (Months)</label>
+                                                        <input
+                                                            type="number"
+                                                            className="form-control"
+                                                            value={propertyData.assumptions.bankDisbursementInterval}
+                                                            placeholder={placeholders.bankDisbursementInterval}
+                                                            onChange={(e) => handleAssumptionChange('bankDisbursementInterval', e.target.value)}
+                                                        />
+                                                        <small className="text-muted">Months between disbursements</small>
+                                                    </div>
+                                                </div>
+
+                                                {/* Row 2: Funding Window (Start & End) */}
+                                                <div className="p-3 bg-light rounded border border-light mb-3">
+                                                    <h6 className="fw-bold mb-3 small text-uppercase text-muted">
+                                                        <i className="bi bi-calendar-range me-2"></i>Bank Funding Window
+                                                    </h6>
+                                                    <div className="row g-3">
+                                                        <div className="col-md-6">
+                                                            <label className="form-label small">First Disbursement (Month)</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-control"
+                                                                value={propertyData.assumptions.bankDisbursementStartMonth}
+                                                                placeholder={placeholders.bankDisbursementStartMonth}
+                                                                onChange={(e) => handleAssumptionChange('bankDisbursementStartMonth', e.target.value)}
+                                                            />
+                                                        </div>
+
+                                                        {/* Last Disbursement Field */}
+                                                        <div className="col-md-6">
+                                                            <label className="form-label small">Last Disbursement (Month)</label>
+                                                            <input
+                                                                type="number"
+                                                                className="form-control"
+                                                                value={propertyData.assumptions.lastBankDisbursementMonth}
+                                                                // Auto-suggest a value based on possession if empty
+                                                                placeholder={`e.g. ${getSafeValue(propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.possessionMonths) - 6 || 24}`}
+                                                                onChange={(e) => handleAssumptionChange('lastBankDisbursementMonth', e.target.value)}
+                                                            />
+                                                            <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                                                Stops IDC growth (e.g. when structure is ready)
+                                                            </small>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="alert alert-info mb-0 py-2">
+                                                    <small>
+                                                        <i className="bi bi-info-circle me-2"></i>
+                                                        <strong>Note:</strong> IDC Interest continues to accumulate until possession, even after the last bank disbursement is made.
+                                                    </small>
+                                                </div>
+                                            </>
+                                        )
+                                    )
+                                )}
                             </div>
                         )}
 
@@ -1692,388 +1968,428 @@ const PropertyComparison = () => {
                         {currentStep === 3 && (
                             <div className="animate-fade-in">
 
-                                {/* Home Loan Information */}
-                                <div className="mb-4 ps-4 pe-4">
-                                    <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                                        <i className="bi bi-bank me-2"></i>
-                                        Home Loan Details
-                                    </h5>
-                                    <div className="row g-3">
-                                        {/* Column 1: Rate (Unchanged) */}
-                                        <div className="col-md-3">
-                                            <label className="form-label small">Home Loan Rate</label>
-                                            <div className="input-group input-group-sm">
-                                                <input
-                                                    type="number"
-                                                    step="0.1"
-                                                    className="form-control"
-                                                    value={propertyData.assumptions.homeLoanRate}
-                                                    placeholder={placeholders.homeLoanRate}
-                                                    onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
-                                                />
-                                                <span className="input-group-text bg-white text-muted">%</span>
-                                            </div>
-                                        </div>
-
-                                        {/* Column 2: Term (Unchanged) */}
-                                        <div className="col-md-3">
-                                            <label className="form-label">Loan Term (Years)</label>
-                                            <input
-                                                type="number"
-                                                className="form-control"
-                                                value={propertyData.assumptions.homeLoanTerm}
-                                                placeholder={placeholders.investmentPeriod}
-                                                onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
-                                            />
-                                        </div>
-
-                                        {/* ✅ Column 3: NEW Mode Toggle & Inputs */}
-                                        <div className="col-md-3">
-                                            <div className="d-flex justify-content-between align-items-center mb-1">
-                                                <label className="form-label mb-0 small fw-bold">EMI Start Logic</label>
-
-                                                {/* Mode Toggle Buttons */}
-                                                <div className="btn-group btn-group-sm" role="group">
-                                                    <button
-                                                        type="button"
-                                                        className={`btn ${(!propertyData.assumptions.homeLoanStartMode || propertyData.assumptions.homeLoanStartMode === 'default') ? 'btn-primary' : 'btn-outline-secondary'}`}
-                                                        onClick={() => handleAssumptionChange('homeLoanStartMode', 'default')}
-                                                        style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
-                                                    >
-                                                        Default
-                                                    </button>
-                                                    <button
-                                                        type="button"
-                                                        className={`btn ${propertyData.assumptions.homeLoanStartMode === 'manual' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                                                        onClick={() => handleAssumptionChange('homeLoanStartMode', 'manual')}
-                                                        style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
-                                                    >
-                                                        Manual
-                                                    </button>
-                                                </div>
-                                            </div>
-
-                                            {/* CONDITIONAL RENDER: Based on Mode */}
-                                            {propertyData.assumptions.homeLoanStartMode === 'manual' ? (
-                                                // Option B: MANUAL MODE
-                                                <div className="mt-2">
+                                {/* Home Loan Details (Accordion) */}
+                                {renderAccordionSection(
+                                    'home_loan',
+                                    'Home Loan Details',
+                                    'bi-bank',
+                                    (
+                                        <div className="row g-3">
+                                            {/* Column 1: Rate */}
+                                            <div className="col-md-3">
+                                                <label className="form-label small">Home Loan Rate</label>
+                                                <div className="input-group input-group-sm">
                                                     <input
                                                         type="number"
-                                                        className="form-control form-control-sm"
-                                                        value={propertyData.assumptions.homeLoanStartMonth}
-                                                        placeholder="e.g. 25"
-                                                        onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                                                        step="0.1"
+                                                        className="form-control"
+                                                        value={propertyData.assumptions.homeLoanRate}
+                                                        placeholder={placeholders.homeLoanRate}
+                                                        onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
                                                     />
-                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>
-                                                        Enter exact start month (e.g. 25)
+                                                    <span className="input-group-text bg-white text-muted">%</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Column 2: Term */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">Loan Term (Years)</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={propertyData.assumptions.homeLoanTerm}
+                                                    placeholder={placeholders.investmentPeriod}
+                                                    onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
+                                                />
+                                            </div>
+
+                                            {/* Column 3: EMI Start Logic (Toggle & Inputs) */}
+                                            <div className="col-md-3">
+                                                <div className="d-flex justify-content-between align-items-center mb-1">
+                                                    <label className="form-label mb-0 small fw-bold">EMI Start Logic</label>
+
+                                                    {/* Mode Toggle Buttons */}
+                                                    <div className="btn-group btn-group-sm" role="group">
+                                                        <button
+                                                            type="button"
+                                                            className={`btn ${(!propertyData.assumptions.homeLoanStartMode || propertyData.assumptions.homeLoanStartMode === 'default') ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                                            onClick={() => handleAssumptionChange('homeLoanStartMode', 'default')}
+                                                            style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+                                                        >
+                                                            Default
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            className={`btn ${propertyData.assumptions.homeLoanStartMode === 'manual' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                                            onClick={() => handleAssumptionChange('homeLoanStartMode', 'manual')}
+                                                            style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
+                                                        >
+                                                            Manual
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                {/* CONDITIONAL RENDER: Based on Mode */}
+                                                {propertyData.assumptions.homeLoanStartMode === 'manual' ? (
+                                                    // Option B: MANUAL MODE
+                                                    <div className="mt-2">
+                                                        <input
+                                                            type="number"
+                                                            className="form-control form-control-sm"
+                                                            value={propertyData.assumptions.homeLoanStartMonth}
+                                                            placeholder="e.g. 25"
+                                                            onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                                                        />
+                                                        <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                                            Enter exact start month (e.g. 25)
+                                                        </small>
+                                                    </div>
+                                                ) : (
+                                                    // Option A: DEFAULT MODE
+                                                    <div>
+                                                        {/* The Message */}
+                                                        <div className="alert border p-1 mb-2 text-center text-muted" style={{ fontSize: '0.70rem', color: '#666', lineHeight: '1.2' }}>
+                                                            HL EMI may start after Last Demand (Constr. + Delay)
+                                                        </div>
+
+                                                        {/* The Slider */}
+                                                        <label className="form-label small text-muted mb-0" style={{ fontSize: '0.75rem' }}>
+                                                            Delay: <strong>{propertyData.assumptions.homeLoanStartMonth} months</strong>
+                                                        </label>
+                                                        <input
+                                                            type="range"
+                                                            className="form-range"
+                                                            min="0"
+                                                            max="24" // Limit delay to 24 months
+                                                            value={propertyData.assumptions.homeLoanStartMonth || 0}
+                                                            onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                                                        />
+                                                    </div>
+                                                )}
+                                            </div>
+
+                                            {/* Column 4: Display Logic */}
+                                            <div className="col-md-3">
+                                                <div className="p-3 bg-light rounded h-100 d-flex flex-column justify-content-center border border-light">
+                                                    <small className="text-muted text-center" style={{ fontSize: '0.75rem' }}>Actual EMI Start</small>
+                                                    <div className="fw-bold text-center fs-5 ">
+                                                        Month {
+                                                            propertyData.assumptions.homeLoanStartMode === 'manual'
+                                                                ? (getSafeValue(propertyData.assumptions.homeLoanStartMonth))
+                                                                : (
+                                                                    // Show calculated Result: Last Demand + Delay + 1
+                                                                    (() => {
+                                                                        const explicitLast = getSafeValue(propertyData.assumptions.lastBankDisbursementMonth);
+                                                                        const constrEnd = getSafeValue(propertyData.assumptions.clpDurationYears) * 12;
+                                                                        const possession = parseInt(propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.possessionMonths) || 0;
+
+                                                                        // Logic matches calculateFinancials
+                                                                        const base = propertyData.paymentPlan === 'clp'
+                                                                            ? (explicitLast > 0 ? explicitLast : (constrEnd > 0 ? constrEnd : possession))
+                                                                            : possession; // RTM uses possession
+
+                                                                        return base + getSafeValue(propertyData.assumptions.homeLoanStartMonth) + 1;
+                                                                    })()
+                                                                )
+                                                        }
+                                                    </div>
+                                                    <small className="text-muted text-center" style={{ fontSize: '0.65rem' }}>
+                                                        {propertyData.assumptions.homeLoanStartMode === 'manual'
+                                                            ? "(User Defined)"
+                                                            : "(Last Demand + Delay + 1)"}
                                                     </small>
                                                 </div>
-                                            ) : (
-                                                // Option A: DEFAULT MODE
-                                                <div>
-                                                    {/* The Message */}
-                                                    <div className="alert border p-1 mb-2 text-center text-muted" style={{ fontSize: '0.70rem', color: '#666', lineHeight: '1.2' }}>
-                                                        HL EMI starts after Last Demand (Constr. + Delay)
-                                                    </div>
-
-                                                    {/* The Slider */}
-                                                    <label className="form-label small text-muted mb-0" style={{ fontSize: '0.75rem' }}>
-                                                        Delay: <strong>{propertyData.assumptions.homeLoanStartMonth} months</strong>
-                                                    </label>
-                                                    <input
-                                                        type="range"
-                                                        className="form-range"
-                                                        min="0"
-                                                        max="24" // Limit delay to 24 months
-                                                        value={propertyData.assumptions.homeLoanStartMonth || 0}
-                                                        onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* ✅ Column 4: UPDATED Display Logic */}
-                                        <div className="col-md-3">
-                                            <div className="p-3 bg-light rounded h-100 d-flex flex-column justify-content-center border">
-                                                <small className="text-muted text-center" style={{ fontSize: '0.75rem' }}>Actual EMI Start</small>
-                                                <div className="fw-bold text-center fs-5 ">
-                                                    Month {
-                                                        propertyData.assumptions.homeLoanStartMode === 'manual'
-                                                            ? (getSafeValue(propertyData.assumptions.homeLoanStartMonth))
-                                                            : (
-                                                                // Logic: Construction Period + Delay + 1
-                                                                (propertyData.paymentPlan === 'clp'
-                                                                    ? (getSafeValue(propertyData.assumptions.clpDurationYears) * 12)
-                                                                    : (parseInt(propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.possessionMonths) || 0)
-                                                                )
-                                                                + getSafeValue(propertyData.assumptions.homeLoanStartMonth)
-                                                                + 1
-                                                            )
-                                                    }
-                                                </div>
-                                                <small className="text-muted text-center" style={{ fontSize: '0.65rem' }}>
-                                                    {propertyData.assumptions.homeLoanStartMode === 'manual'
-                                                        ? "(User Defined)"
-                                                        : "(Construction + Delay + 1)"}
-                                                </small>
                                             </div>
                                         </div>
-                                    </div>
-                                </div>
+                                    )
+                                )}
 
                                 {/* Personal Loan 1 Information */}
-                                <div className="mb-4 ps-4 pe-4">
-                                    <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                                        <i className="bi bi-cash-coin me-2"></i>
-                                        Personal Loan 1 Details
-                                    </h5>
-                                    <div className="row g-3">
-                                        <div className="col-md-3">
-                                            <label className="form-label">Share of Total Cost (%)</label>
-                                            <input
-                                                type="number"
-                                                className="form-control"
-                                                value={propertyData.assumptions.personalLoan1Share}
-                                                onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
-                                                placeholder={placeholders.investmentPeriod}
-                                                disabled={propertyData.paymentPlan !== 'custom'}
-                                            />
-                                            {propertyData.paymentPlan !== 'custom' && (
-                                                <small className="text-muted">Set by payment plan</small>
-                                            )}
-                                        </div>
-                                        <div className="col-md-3">
-                                            <label className="form-label">Amount</label>
-                                            <div className="form-control bg-light">
-                                                {formatCurrency(propertyData.properties[0]?.size * propertyData.purchasePrice * (propertyData.assumptions.personalLoan1Share / 100))}
-                                            </div>
-                                        </div>
-                                        <div className="col-md-3">
-                                            <label className="form-label">Personal Loan Rate (%)</label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                className="form-control"
-                                                value={propertyData.assumptions.personalLoan1Rate}
-                                                placeholder={placeholders.personalLoan1Rate}
-                                                onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
-                                            />
-                                        </div>
-                                        <div className="col-md-3">
-                                            <label className="form-label">
-                                                Start Month (Current: {propertyData.assumptions.personalLoan1StartMonth})
-                                                <br />
-                                                <small className="text-muted">Independent of possession</small>
-                                            </label>
-                                            <input
-                                                type="range"
-                                                className="form-range"
-                                                min="0"
-                                                max="84"
-                                                value={propertyData.assumptions.personalLoan1StartMonth}
-                                                onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
-                                            />
-                                            <div className="d-flex justify-content-between">
-                                                <small>Month 0</small>
-                                                <small>84 months</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Personal Loan 2 Information */}
-                                <div className="mb-4 ps-4 pe-4">
-                                    <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                                        <i className="bi bi-cash-coin me-2"></i>
-                                        Personal Loan 2 Details
-                                    </h5>
-                                    <div className="row g-3">
-                                        <div className="col-md-3">
-                                            <label className="form-label">Share of Total Cost (%)</label>
-                                            <input
-                                                type="number"
-                                                className="form-control"
-                                                value={propertyData.assumptions.personalLoan2Share}
-                                                onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
-                                                disabled={propertyData.paymentPlan !== 'custom'}
-                                            />
-                                            {propertyData.paymentPlan !== 'custom' && (
-                                                <small className="text-muted">Set by payment plan</small>
-                                            )}
-                                        </div>
-                                        <div className="col-md-3">
-                                            <label className="form-label">Amount</label>
-                                            <div className="form-control bg-light">
-                                                {formatCurrency(propertyData.properties[0]?.size * propertyData.purchasePrice * (propertyData.assumptions.personalLoan2Share / 100))}
-                                            </div>
-                                        </div>
-                                        <div className="col-md-3">
-                                            <label className="form-label">Personal Loan Rate (%)</label>
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                className="form-control"
-                                                value={propertyData.assumptions.personalLoan2Rate}
-                                                onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
-                                                placeholder={placeholders.personalLoan2Rate}
-                                                disabled={propertyData.assumptions.personalLoan2Share === 0}
-                                            />
-                                            {propertyData.assumptions.personalLoan2Share === 0 && (
-                                                <small className="text-muted">Not applicable (0% share)</small>
-                                            )}
-                                        </div>
-                                        <div className="col-md-3">
-                                            <label className="form-label">
-                                                Start After Possession
-                                                <br />
-                                                <small className="text-muted">Delay: {propertyData.assumptions.personalLoan2StartMonth} months</small>
-                                            </label>
-                                            <input
-                                                type="range"
-                                                className="form-range"
-                                                min="0"
-                                                max="36"
-                                                value={propertyData.assumptions.personalLoan2StartMonth}
-                                                onChange={(e) => handleAssumptionChange('personalLoan2StartMonth', e.target.value)}
-                                                disabled={propertyData.assumptions.personalLoan2Share === 0}
-                                            />
-                                            <div className="d-flex justify-content-between">
-                                                <small>+0 mo</small>
-                                                <small>+36 mo</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* CLP Specific Details */}
-                                {propertyData.paymentPlan === 'clp' && (
-                                    <div className="mb-4 ps-4 pe-4">
-                                        <h5 className="fw-bold mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                                            <i className="bi bi-building me-2"></i>
-                                            CLP Construction Details
-                                        </h5>
+                                {/* Personal Loan 1 Details (Accordion) */}
+                                {renderAccordionSection(
+                                    'pl1_details',
+                                    'Personal Loan 1 Details',
+                                    'bi-cash-coin',
+                                    (
                                         <div className="row g-3">
-                                            <div className="col-md-4">
-                                                <label className="form-label">Construction Duration (Years)</label>
+                                            {/* Column 1: Share % */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">Share of Total Cost (%)</label>
                                                 <input
                                                     type="number"
-                                                    step="0.5"
                                                     className="form-control"
-                                                    value={propertyData.assumptions.clpDurationYears}
-                                                    placeholder={placeholders.clpDurationYears}
-                                                    onChange={(e) => handleAssumptionChange('clpDurationYears', e.target.value)}
+                                                    value={propertyData.assumptions.personalLoan1Share}
+                                                    onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
+                                                    placeholder={placeholders.investmentPeriod}
+                                                    disabled={propertyData.paymentPlan !== 'custom'}
                                                 />
-                                                <small className="text-muted">Total construction period</small>
+                                                {propertyData.paymentPlan !== 'custom' && (
+                                                    <small className="text-muted">Set by payment plan</small>
+                                                )}
                                             </div>
-                                            <div className="col-md-4">
-                                                <label className="form-label">First Bank Disbursement (Month)</label>
-                                                <input
-                                                    type="number"
-                                                    className="form-control"
-                                                    value={propertyData.assumptions.bankDisbursementStartMonth}
-                                                    placeholder={placeholders.bankDisbursementStartMonth}
-                                                    onChange={(e) => handleAssumptionChange('bankDisbursementStartMonth', e.target.value)}
-                                                />
-                                                <small className="text-muted">Month when first disbursement occurs</small>
+
+                                            {/* Column 2: Calculated Amount */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">Amount</label>
+                                                <div className="form-control bg-light border-light text-secondary">
+                                                    {formatCurrency(
+                                                        (propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.size || 0) * getSafeValue(propertyData.purchasePrice) * (getSafeValue(propertyData.assumptions.personalLoan1Share) / 100)
+                                                    )}
+                                                </div>
                                             </div>
-                                            <div className="col-md-4">
-                                                <label className="form-label">Disbursement Interval (Months)</label>
+
+                                            {/* Column 3: Interest Rate */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">Personal Loan Rate (%)</label>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        step="0.1"
+                                                        className="form-control"
+                                                        value={propertyData.assumptions.personalLoan1Rate}
+                                                        placeholder={placeholders.personalLoan1Rate}
+                                                        onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
+                                                    />
+                                                    <span className="input-group-text bg-white text-muted">%</span>
+                                                </div>
+                                            </div>
+
+                                            {/* Column 4: Start Month Slider */}
+                                            <div className="col-md-3">
+                                                <label className="form-label d-flex justify-content-between">
+                                                    <span>Start Month</span>
+                                                    <span className="fw-bold">Month {propertyData.assumptions.personalLoan1StartMonth}</span>
+                                                </label>
                                                 <input
-                                                    type="number"
-                                                    className="form-control"
-                                                    value={propertyData.assumptions.bankDisbursementInterval}
-                                                    placeholder={placeholders.bankDisbursementInterval}
-                                                    onChange={(e) => handleAssumptionChange('bankDisbursementInterval', e.target.value)}
+                                                    type="range"
+                                                    className="form-range"
+                                                    min="0"
+                                                    max="84"
+                                                    value={propertyData.assumptions.personalLoan1StartMonth}
+                                                    onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
                                                 />
-                                                <small className="text-muted">Months between disbursements</small>
+                                                <div className="d-flex justify-content-between">
+                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>Month 0</small>
+                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>Month 84</small>
+                                                </div>
+                                                <small className="text-muted d-block text-end mt-1" style={{ fontSize: '0.65rem' }}>Independent of possession</small>
                                             </div>
                                         </div>
-                                        <div className="alert alert-info mt-3">
-                                            <small>
-                                                <i className="bi bi-info-circle me-2"></i>
-                                                In CLP plans, Interest During Construction (IDC) is calculated monthly and added to the Home Loan EMI calculation.
-                                            </small>
+                                    )
+                                )}
+
+                                {/* Personal Loan 2 Details (Accordion) */}
+                                {renderAccordionSection(
+                                    'pl2_details',
+                                    'Personal Loan 2 Details',
+                                    'bi-cash-coin',
+                                    (
+                                        <div className="row g-3">
+                                            {/* Column 1: Share % */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">Share of Total Cost (%)</label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={propertyData.assumptions.personalLoan2Share}
+                                                    onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
+                                                    placeholder={placeholders.investmentPeriod}
+                                                    disabled={propertyData.paymentPlan !== 'custom'}
+                                                />
+                                                {propertyData.paymentPlan !== 'custom' && (
+                                                    <small className="text-muted">Set by payment plan</small>
+                                                )}
+                                            </div>
+
+                                            {/* Column 2: Calculated Amount */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">Amount</label>
+                                                <div className="form-control bg-light border-light text-secondary">
+                                                    {formatCurrency(
+                                                        (propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.size || 0) * getSafeValue(propertyData.purchasePrice) * (getSafeValue(propertyData.assumptions.personalLoan2Share) / 100)
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Column 3: Interest Rate */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">Personal Loan Rate (%)</label>
+                                                <div className="input-group">
+                                                    <input
+                                                        type="number"
+                                                        step="0.1"
+                                                        className="form-control"
+                                                        value={propertyData.assumptions.personalLoan2Rate}
+                                                        placeholder={placeholders.personalLoan2Rate}
+                                                        onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
+                                                        disabled={propertyData.assumptions.personalLoan2Share === 0}
+                                                    />
+                                                    <span className="input-group-text bg-white text-muted">%</span>
+                                                </div>
+                                                {propertyData.assumptions.personalLoan2Share === 0 && (
+                                                    <small className="text-muted">Not applicable (0% share)</small>
+                                                )}
+                                            </div>
+
+                                            {/* Column 4: Start Month Slider */}
+                                            <div className="col-md-3">
+                                                <label className="form-label d-flex justify-content-between">
+                                                    <span>Start After <br></br>Possession</span>
+                                                    <span className="fw-bold text-muted">Delay: {propertyData.assumptions.personalLoan2StartMonth} mo</span>
+                                                </label>
+                                                <input
+                                                    type="range"
+                                                    className="form-range"
+                                                    min="0"
+                                                    max="36"
+                                                    value={propertyData.assumptions.personalLoan2StartMonth}
+                                                    onChange={(e) => handleAssumptionChange('personalLoan2StartMonth', e.target.value)}
+                                                    disabled={propertyData.assumptions.personalLoan2Share === 0}
+                                                />
+                                                <div className="d-flex justify-content-between">
+                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>+0 mo</small>
+                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>+36 mo</small>
+                                                </div>
+                                            </div>
                                         </div>
-                                    </div>
+                                    )
                                 )}
                             </div>
                         )}
 
-                        {/* === STEP 4: EXIT SCENARIOS === */}
+                        {/* === STEP 4: EXIT SCENARIOS (Accordion) === */}
                         {currentStep === 4 && (
-                            <div className="animate-fade-in">
-                                {/* NEW HEADER: Title on left, Button on right */}
-                                <div className="d-flex justify-content-between align-items-center mb-4 pb-2 ms-4 border-bottom border-secondary border-opacity-25">
-                                    <h5 className="fw-bold text-secndary mb-0">
-                                        <i className="bi bi-graph-up-arrow me-2"></i>Exit Scenarios
-                                    </h5>
-                                    <button
-                                        className="btn btn-sm btn-outline-primary"
-                                        onClick={handleAddExitPriceScenario}
-                                    >
-                                        <i className="bi bi-plus-lg me-1"></i> Add Scenario
-                                    </button>
-                                </div>
-
-                                <div className="mb-4 ps-4 pe-4">
-                                    <div className="row g-3 mb-3">
-                                        {/* Left Column: Selected Price */}
-                                        <div className="col-md-6">
-                                            <label className="form-label">Selected Exit Price (₹/sq.ft)</label>
-                                            <input
-                                                type="number"
-                                                className="form-control"
-                                                value={userSelections.selectedExitPrice}
-                                                placeholder={`e.g. ${(parseFloat(propertyData.purchasePrice) || 5000) + 2500}`}
-                                                // ✅ FIX: Allow empty string deletion without forcing 0
-                                                onChange={(e) => handleSelectionUpdate('selectedExitPrice', e.target.value === '' ? '' : parseFloat(e.target.value))}
-                                            />
+                            renderAccordionSection(
+                                'exit_scenarios',
+                                'Exit Scenarios',
+                                'bi-graph-up-arrow',
+                                (
+                                    <>
+                                        {/* Header Row inside Body: Title Left, Button Right */}
+                                        <div className="d-flex justify-content-between align-items-center mb-3">
+                                            <h6 className="mb-0 text-muted">
+                                                Price Scenarios ({userSelections.scenarioExitPrices.length})
+                                            </h6>
+                                            <button
+                                                className="btn btn-sm btn-outline-primary"
+                                                onClick={handleAddExitPriceScenario}
+                                            >
+                                                <i className="bi bi-plus-lg me-1"></i> Add Scenario
+                                            </button>
                                         </div>
 
-                                        {/* Right Column: Scenarios List */}
-                                        <div className="col-md-6">
-                                            <label className="form-label">Scenario Exit Prices</label>
+                                        <div className="row g-3">
+                                            {/* Left Column: Selected Price with INFO ICON */}
+                                            <div className="col-md-6">
+                                                <div className="d-flex justify-content-between align-items-center">
+                                                    <label className="form-label">Selected Exit Price (₹/sq.ft)</label>
 
-                                            {/* ✅ CHECK: If list is empty, show empty state message */}
-                                            {userSelections.scenarioExitPrices.length === 0 ? (
-                                                <div className="text-center p-3 border rounded bg-light text-muted" style={{ borderStyle: 'dashed' }}>
-                                                    <i className="d-block fs-2 mb-2 opacity-50"></i>
-                                                    <small>
-                                                        Press the <strong>"Add Scenario"</strong> button above<br />
-                                                        to create your first exit price scenario.
-                                                    </small>
+                                                    {/* ℹ️ INFO ICON BUTTON */}
+                                                    <button
+                                                        className="btn btn-link text-decoration-none p-0 mb-2"
+                                                        onClick={() => setShowExitLogic(!showExitLogic)}
+                                                        title="See calculation logic"
+                                                    >
+                                                        <small className="fw-bold text-white" style={{ fontSize: '0.75rem' }}>
+                                                            <i className="bi bi-info-circle-fill text-white me-1"></i>
+                                                            How is this calculated?
+                                                        </small>
+                                                    </button>
                                                 </div>
-                                            ) : (
-                                                <div className="row g-2">
-                                                    {userSelections.scenarioExitPrices.map((price, index) => (
-                                                        <div key={index} className="col-12">
-                                                            <div className="input-group input-group-sm mb-2 ps-4 pe-4">
-                                                                <span className="input-group-text">Scenario {index + 1}</span>
-                                                                <input
-                                                                    type="number"
-                                                                    className="form-control"
-                                                                    value={price}
-                                                                    placeholder={`e.g. ${10000 + (index * 1000)}`}
-                                                                    onChange={(e) => handleUpdateExitPriceScenario(index, e.target.value)}
-                                                                />
-                                                                <button
-                                                                    className="btn btn-danger d-flex align-items-center justify-content-center"
-                                                                    type="button"
-                                                                    onClick={() => handleRemoveExitPriceScenario(index)}
-                                                                    title="Remove Scenario"
-                                                                    style={{ width: '40px' }}
-                                                                >
-                                                                    <i className="bi bi-trash-fill text-white"></i>
-                                                                </button>
+
+                                                {/* 📉 LOGIC DROPDOWN CARD (Visible only when clicked) */}
+                                                {showExitLogic && (
+                                                    <div className="glass-card animate-fade-in">
+                                                        <div className="card-body p-2">
+                                                            <h6 className="card-title small fw-bold text-white mb-2 border-bottom pb-1">
+                                                                Logic: Purchase Price + Increment
+                                                            </h6>
+                                                            <ul className="list-unstyled mb-0" style={{ fontSize: '0.75rem' }}>
+                                                                <li className="d-flex justify-content-between mb-1">
+                                                                    <span>&lt; 1 Year:</span> <strong>+₹500</strong>
+                                                                </li>
+                                                                <li className="d-flex justify-content-between mb-1">
+                                                                    <span>1 Year (12-23m):</span> <strong>+₹1000</strong>
+                                                                </li>
+                                                                <li className="d-flex justify-content-between mb-1">
+                                                                    <span>2 Years (24-35m):</span> <strong>+₹2000</strong>
+                                                                </li>
+                                                                <li className="d-flex justify-content-between mb-1">
+                                                                    <span>3 Years (36-47m):</span> <strong>+₹2500</strong>
+                                                                </li>
+                                                                <li className="d-flex justify-content-between mb-1">
+                                                                    <span>4 Years (48-59m):</span> <strong>+₹3000</strong>
+                                                                </li>
+                                                                <li className="d-flex justify-content-between">
+                                                                    <span>5+ Years:</span> <strong>+₹3500</strong>
+                                                                </li>
+                                                            </ul>
+                                                            <div className="mt-2 pt-2 border-top text-center">
+                                                                <small className="text-muted fst-italic">
+                                                                    Based on your Holding Period of {
+                                                                        propertyData.assumptions.holdingPeriodUnit === 'months'
+                                                                            ? `${propertyData.assumptions.investmentPeriod} Months`
+                                                                            : `${propertyData.assumptions.investmentPeriod} Years`
+                                                                    }
+                                                                </small>
                                                             </div>
                                                         </div>
-                                                    ))}
-                                                </div>
-                                            )}
+                                                    </div>
+                                                )}
+
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={userSelections.selectedExitPrice}
+                                                    placeholder={`e.g. ${(parseFloat(propertyData.purchasePrice) || 5000) + 2500}`}
+                                                    onChange={(e) => handleSelectionUpdate('selectedExitPrice', e.target.value === '' ? '' : parseFloat(e.target.value))}
+                                                />
+                                                <small className="text-muted">Auto-calculated based on holding period (Editable)</small>
+                                            </div>
+
+                                            {/* Right Column: Scenarios List */}
+                                            <div className="col-md-6">
+                                                <label className="form-label">Scenario Exit Prices</label>
+                                                {userSelections.scenarioExitPrices.length === 0 ? (
+                                                    <div className="text-center p-3 border rounded bg-light text-muted" style={{ borderStyle: 'dashed' }}>
+                                                        <i className="d-block fs-2 mb-2 opacity-50"></i>
+                                                        <small>
+                                                            Press the <strong>"Add Scenario"</strong> button above<br />
+                                                            to create your first exit price scenario.
+                                                        </small>
+                                                    </div>
+                                                ) : (
+                                                    <div className="row g-2">
+                                                        {userSelections.scenarioExitPrices.map((price, index) => (
+                                                            <div key={index} className="col-12">
+                                                                <div className="input-group input-group-sm mb-2 ps-4 pe-4">
+                                                                    <span className="input-group-text">Scenario {index + 1}</span>
+                                                                    <input
+                                                                        type="number"
+                                                                        className="form-control"
+                                                                        value={price}
+                                                                        placeholder={`e.g. ${10000 + (index * 1000)}`}
+                                                                        onChange={(e) => handleUpdateExitPriceScenario(index, e.target.value)}
+                                                                    />
+                                                                    <button
+                                                                        className="btn btn-danger d-flex align-items-center justify-content-center"
+                                                                        type="button"
+                                                                        onClick={() => handleRemoveExitPriceScenario(index)}
+                                                                        title="Remove Scenario"
+                                                                        style={{ width: '40px' }}
+                                                                    >
+                                                                        <i className="bi bi-trash-fill text-white"></i>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
-                                </div>
-                            </div>
+                                    </>
+                                )
+                            )
                         )}
                         {renderNavButtons()}
 
@@ -2687,7 +3003,11 @@ const PropertyComparison = () => {
                                                         totalHoldingMonths: breakdown.totalHoldingMonths,
                                                         homeLoanAmount: breakdown.homeLoanAmount,
                                                         interestRate: propertyData.assumptions.homeLoanRate,
-                                                        propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name
+                                                        propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
+                                                        homeLoanTerm: propertyData.assumptions.homeLoanTerm, // e.g., 20 years
+                                                        lastBankDisbursementMonth: getSafeValue(propertyData.assumptions.lastBankDisbursementMonth) || null,
+                                                        homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
+                                                        manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth)
                                                     }
                                                 })}
                                             >
@@ -2728,7 +3048,9 @@ const PropertyComparison = () => {
                                                             propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
                                                             possessionMonths: breakdown.possessionMonths,
                                                             totalPaid: breakdown.prePossessionTotal,
-                                                            homeLoanAmount: breakdown.homeLoanAmount
+                                                            homeLoanAmount: breakdown.homeLoanAmount,
+                                                            lastBankDisbursementMonth: propertyData.assumptions.lastBankDisbursementMonth,
+                                                            interestRate: propertyData.assumptions.homeLoanRate
                                                         }
                                                     })}
                                                 >

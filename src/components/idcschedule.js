@@ -10,11 +10,11 @@ const IdcSchedulePage = () => {
   const {
     idcSchedule,
     pl1EMI,
-    // totalIDC, // We will recalculate this based on the filtered view
     possessionMonths,
     homeLoanAmount = 0,
-    // ✅ NEW: Receive the user's holding period
-    totalHoldingMonths
+    totalHoldingMonths,
+    lastBankDisbursementMonth,
+    interestRate = 9.0
   } = location.state || {};
 
   const formatCurrency = (value) =>
@@ -32,28 +32,44 @@ const IdcSchedulePage = () => {
   }
 
   // ==========================================
-  // ⚙️ LOGIC: FILTER & RECALCULATE
+  // ⚙️ LOGIC: ALIGNED WITH MONTHLY BREAKDOWN
   // ==========================================
 
-  // 1. Determine Cutoff: Stop at the earlier of Possession OR Exit Month
-  const holdingLimit = totalHoldingMonths ? parseInt(totalHoldingMonths) : possessionMonths;
-  const cutoffMonth = Math.min(possessionMonths, holdingLimit);
+  // 1. ✅ CRITICAL FIX: Calculate Slab Amount Robustly
+  // We strictly divide the Total Loan by the Number of Slabs in the schedule.
+  // This ensures that if the schedule is compressed to 6 slabs (18 months), 
+  // the slab amount correctly increases (e.g., 16L / 6 = ₹2.66L).
+  const disbursementPerSlab = idcSchedule.length > 0 ? homeLoanAmount / idcSchedule.length : 0;
 
-  // 2. Filter the Schedule: Only show slabs released BEFORE or ON the cutoff month
+  // 2. Determine Cutoff Limits
+  const holdingLimit = totalHoldingMonths ? parseInt(totalHoldingMonths) : possessionMonths;
+
+  const derivedLastMonth = idcSchedule.length > 0
+    ? Math.max(...idcSchedule.map(s => s.releaseMonth))
+    : possessionMonths;
+
+  const fundingEndMonth = lastBankDisbursementMonth
+    ? parseInt(lastBankDisbursementMonth)
+    : derivedLastMonth;
+
+  // 3. Filter Schedule (Visual Cutoff only)
+  const cutoffMonth = Math.min(fundingEndMonth, holdingLimit);
   const filteredSchedule = idcSchedule.filter(row => row.releaseMonth <= cutoffMonth);
 
-  // 3. Recalculate Summaries based on FILTERED data
-  const disbursementPerSlab = idcSchedule.length > 0 ? homeLoanAmount / idcSchedule.length : 0;
-  
-  // Note: We sum up the interest cost of only the slabs that were actually released
-  const grandTotalInterest = filteredSchedule.reduce((acc, row) => acc + row.interestCost, 0);
+  // 4. Calculate Interest Variables
+  // Base Interest = (Slab Amount * Rate) / 12
+  const baseSlabInterest = disbursementPerSlab * (interestRate / 100) / 12;
 
-  // Base Interest for ONE single slab
-  const baseSlabInterest = disbursementPerSlab * (9.0 / 100) / 12;
+  // 5. Calculate Grand Total (Summing row-by-row for precision)
+  const grandTotalInterest = filteredSchedule.reduce((acc, row) => {
+    // Duration: From Release Month until Possession (e.g. Month 18 to 24 = 6 months)
+    const duration = Math.max(0, possessionMonths - row.releaseMonth);
+    return acc + (baseSlabInterest * duration);
+  }, 0);
 
-  // 4. Calculate Pure Interest Min/Max based on ACTIVE slabs count
-  const minMonthlyInterest = filteredSchedule.length > 0 ? baseSlabInterest : 0; // First month (1 slab)
-  const maxMonthlyInterest = baseSlabInterest * filteredSchedule.length; // Last active month
+  // 6. Summary Stats
+  const minMonthlyInterest = filteredSchedule.length > 0 ? baseSlabInterest : 0;
+  const maxMonthlyInterest = baseSlabInterest * filteredSchedule.length;
 
   return (
     <div className="property-comparison" style={{ minHeight: '100vh', position: 'relative' }}>
@@ -62,7 +78,6 @@ const IdcSchedulePage = () => {
 
       <div className="container py-5 central-container" style={{ position: 'relative', zIndex: 1 }}>
 
-        {/* Header */}
         <div className="d-flex justify-content-between align-items-center mb-5">
           <div>
             <h2 className="fw-bold mb-1" style={{ color: 'var(--text-primary)' }}>
@@ -81,19 +96,19 @@ const IdcSchedulePage = () => {
         </div>
 
         {/* --- SUMMARY CARDS --- */}
-        <div className="glass-card row g-4 mb-5">
+        <div className="glass-card row g-4 mb-5 p-4">
 
-          {/* Card 1: Total Interest (Filtered) */}
+          {/* Card 1: Total Interest */}
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-warning">
               <div className="d-flex align-items-center">
-                <div className="rounded-circle bg-warning bg-opacity-25 p-3 me-3 text-warning">
+                <div className="rounded-circle bg-warning bg-opacity-10 p-3 me-3 text-warning">
                   <i className="bi bi-cash-stack fs-3"></i>
                 </div>
                 <div>
                   <small className="text-uppercase fw-bold opacity-75">Total Interest Cost</small>
                   <h3 className="fw-bold mt-1 mb-0">{formatCurrency(grandTotalInterest)}</h3>
-                  <small className="text-muted" style={{fontSize: '0.7rem'}}>(For displayed period)</small>
+                  <small className="text-muted" style={{ fontSize: '0.7rem' }}>(Until Possession)</small>
                 </div>
               </div>
             </div>
@@ -103,7 +118,7 @@ const IdcSchedulePage = () => {
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-success">
               <div className="d-flex align-items-center">
-                <div className="rounded-circle bg-success bg-opacity-25 p-3 me-md-3 mb-2 mb-md-0 d-inline-block text-success">
+                <div className="rounded-circle bg-success bg-opacity-10 p-3 me-md-3 mb-2 mb-md-0 d-inline-block text-success">
                   <i className="bi bi-arrow-down-circle fs-3"></i>
                 </div>
                 <div>
@@ -118,7 +133,7 @@ const IdcSchedulePage = () => {
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-info">
               <div className="d-flex align-items-center">
-                <div className="rounded-circle bg-info bg-opacity-25 p-3 me-3 text-info">
+                <div className="rounded-circle bg-info bg-opacity-10 p-3 me-3 text-info">
                   <i className="bi bi-wallet2 fs-3"></i>
                 </div>
                 <div>
@@ -133,7 +148,7 @@ const IdcSchedulePage = () => {
           <div className="col-md-6">
             <div className="glass-card p-4 h-100 border-start border-2 border-danger">
               <div className="d-flex align-items-center">
-                <div className="rounded-circle bg-danger bg-opacity-25 p-3 me-3 text-danger">
+                <div className="rounded-circle bg-danger bg-opacity-10 p-3 me-3 text-danger">
                   <i className="bi bi-arrow-up-circle fs-3"></i>
                 </div>
                 <div>
@@ -145,78 +160,79 @@ const IdcSchedulePage = () => {
           </div>
         </div>
 
-        {/* --- TABLE (Using filteredSchedule) --- */}
+        {/* --- TABLE --- */}
         <div className="schedule-container">
-          <div className="schedule-header">
-            <i className="bi bi-table me-2"></i> Disbursement & IDC Breakdown
-          </div>
-
           <div className="table-responsive">
-            <table className="schedule-table">
-              <thead>
+            <table className="schedule-table table-hover">
+              <thead style={{ position: 'sticky', top: 0, zIndex: 10 }}>
                 <tr>
-                  <th style={{ width: '10%', textAlign: 'center', textTransform: 'uppercase' }}>Payment #</th>
-                  <th style={{ width: '15%', textAlign: 'center', textTransform: 'uppercase' }}>Month <br /><span className="fw-normal text-muted" style={{ fontSize: '0.7em' }}>(from booking)</span></th>
-                  <th style={{ width: '15%', textAlign: 'right', color: '#0dcaf0', textTransform: 'uppercase' }}>Disbursement Amount (₹)</th>
-                  <th style={{ width: '10%', textAlign: 'center', textTransform: 'uppercase' }}>Interest Rate (p.a.)</th>
-                  <th style={{ width: '15%', textAlign: 'center', textTransform: 'uppercase' }}>Months to Possession</th>
-                  <th style={{ width: '20%', textAlign: 'right', color: '#ffc107', textTransform: 'uppercase' }}>Monthly Interest (₹)</th>
-                  <th style={{ width: '20%', textAlign: 'right', color: 'var(--brand-color)', textTransform: 'uppercase' }}>Total IDC (₹)</th>
+                  <th className="py-3 text-center bg-light">Payment #</th>
+                  <th className="py-3 text-center bg-light">Month<br /><small className="text-muted fw-normal">(from booking)</small></th>
+                  <th className="py-3 text-end bg-light text-info">Disbursement (₹)</th>
+                  <th className="py-3 text-center bg-light">Rate</th>
+                  <th className="py-3 text-center bg-light">Months to<br />Possession</th>
+                  <th className="py-3 text-end bg-light text-warning">Monthly<br />Interest (₹)</th>
+                  <th className="py-3 text-end text-white" style={{ background: 'var(--brand-color)' }}>Total IDC (₹)</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredSchedule.length > 0 ? (
                   filteredSchedule.map((row, idx) => {
                     const monthsToPossession = Math.max(0, possessionMonths - row.releaseMonth);
+
+                    // Cumulative Monthly Interest = Base Interest * Active Slabs (idx + 1)
                     const cumulativeMonthlyInterest = baseSlabInterest * (idx + 1);
+
+                    // Total Cost for this specific slab = Base Interest * Duration
+                    const totalCostForSlab = baseSlabInterest * monthsToPossession;
 
                     return (
                       <tr key={idx}>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold' }}>{row.slabNo}</td>
-                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>{row.releaseMonth}</td>
-                        <td style={{ textAlign: 'right', color: '#0dcaf0', fontWeight: '500' }}>{formatCurrency(disbursementPerSlab)}</td>
-                        <td style={{ textAlign: 'center', color: 'var(--text-secondary)' }}>9.00%</td>
-                        <td style={{ textAlign: 'center', fontWeight: 'bold', color: 'var(--text-primary)' }}>{monthsToPossession}</td>
-                        <td style={{ textAlign: 'right', color: '#ffc107', fontWeight: '500' }}>
+                        <td className="text-center fw-bold text-muted">{row.slabNo}</td>
+                        <td className="text-center fw-bold">{row.releaseMonth}</td>
+                        <td className="text-end fw-bold text-info">{formatCurrency(disbursementPerSlab)}</td>
+                        <td className="text-center small text-muted">{Number(interestRate).toFixed(2)}%</td>
+                        <td className="text-center fw-bold text-secondary">{monthsToPossession}</td>
+                        <td className="text-end fw-bold text-warning" style={{ background: 'rgba(255, 193, 7, 0.05)' }}>
                           {formatCurrency(cumulativeMonthlyInterest)}
                         </td>
-                        <td style={{ textAlign: 'right', fontWeight: 'bold', color: 'var(--brand-color)', background: 'rgba(102, 126, 234, 0.05)' }}>
-                          {formatCurrency(row.interestCost)}
+                        <td className="text-end fw-bold text-white" style={{ background: 'var(--brand-color)' }}>
+                          {formatCurrency(totalCostForSlab)}
                         </td>
                       </tr>
                     );
                   })
                 ) : (
                   <tr>
-                    <td colSpan="7" className="text-center py-4 text-muted">
-                      No disbursements scheduled within this holding period.
+                    <td colSpan="7" className="text-center py-5 text-muted">
+                      No disbursements scheduled within this period.
                     </td>
                   </tr>
                 )}
               </tbody>
-
-              <tfoot className="schedule-tfoot">
-                <tr>
-                  <td colSpan="6" className="schedule-footer-cell" style={{ textAlign: 'right' }}>
-                    <span className="small text-uppercase opacity-75" style={{ letterSpacing: '1px' }}>Total IDC Interest</span>
-                  </td>
-                  <td className="schedule-footer-cell" style={{ color: 'var(--brand-color)', fontSize: '1.2rem', textAlign: 'right' }}>
-                    {formatCurrency(grandTotalInterest)}
-                  </td>
-                </tr>
-              </tfoot>
-
+              {filteredSchedule.length > 0 && (
+                <tfoot style={{ borderTop: '2px solid #dee2e6' }}>
+                  <tr>
+                    <td colSpan="6" className="text-end py-3">
+                      <span className="text-uppercase small fw-bold text-muted me-3">Total IDC Interest Accumulated</span>
+                    </td>
+                    <td className="text-end py-3 fw-bold fs-5" style={{ color: 'var(--brand-color)' }}>
+                      {formatCurrency(grandTotalInterest)}
+                    </td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
 
         {/* Note */}
-        <div className="mt-4 p-3 rounded d-flex align-items-start" style={{ background: 'rgba(13, 202, 240, 0.1)', borderLeft: '4px solid #0dcaf0' }}>
+        <div className="mt-4 alert alert-info d-flex align-items-start border-0 shadow-sm" style={{ background: 'rgba(13, 202, 240, 0.1)' }}>
           <i className="bi bi-info-circle-fill text-info me-3 mt-1 fs-5"></i>
           <div>
-            <h6 className="mb-1 fw-bold" style={{ color: 'var(--text-primary)' }}>Note on Interest</h6>
-            <p className="mb-0 small" style={{ color: 'var(--text-secondary)' }}>
-              <strong>Monthly Interest</strong> represents the <em>variable</em> portion of your payment. You must add the fixed <strong>PL1 EMI ({formatCurrency(pl1EMI)})</strong> to this amount to know your total monthly outflow.
+            <h6 className="mb-1 fw-bold">Understanding Monthly Outflow</h6>
+            <p className="mb-0 small text-secondary">
+              The <strong>Monthly Interest</strong> shown above is variable. To calculate your actual monthly check, add the fixed <strong>PL1 EMI ({formatCurrency(pl1EMI)})</strong> to the monthly interest column.
             </p>
           </div>
         </div>
