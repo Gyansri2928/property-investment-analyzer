@@ -28,7 +28,7 @@ const INITIAL_PROPERTY_DATA = {
         homeLoanRate: '', homeLoanTerm: '', homeLoanShare: 80, homeLoanStartMonth: 0, // This now acts as "Delay" in Default mode, or "Month" in Manual mode
         homeLoanStartMode: 'default',
         personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
-        personalLoan2Rate: '', personalLoan2Term: 7, personalLoan2StartMonth: 30, personalLoan2Share: 10,
+        personalLoan2Rate: '', personalLoan2Term: 7, personalLoan2StartMonth: '', personalLoan2Share: 10,
         downPaymentShare: 0,
         investmentPeriod: '', clpDurationYears: '', bankDisbursementStartMonth: '', bankDisbursementInterval: '', lastBankDisbursementMonth: ''
     }
@@ -279,6 +279,7 @@ const PropertyComparison = () => {
     // --- STATE ---
     // Inside PropertyComparison component, with other states
     const [validationError, setValidationError] = useState('');
+    const [showPreview, setShowPreview] = useState(false);
     const location = useLocation();
     // Add this with your other state variables
     const [showExitLogic, setShowExitLogic] = useState(false);
@@ -290,6 +291,33 @@ const PropertyComparison = () => {
     const [isSticky, setIsSticky] = useState(false); // Are we past the threshold?
     const [lastScrollY, setLastScrollY] = useState(0);
     const navRef = useRef(null);
+    // --- LOADING OVERLAY STATE ---
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [loadingMessage, setLoadingMessage] = useState('Analyzing...');
+    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+    // --- EFFECT: Handle Window Resize ---
+    useEffect(() => {
+        const handleResize = () => {
+            setIsMobile(window.innerWidth < 768);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // --- DELAYED NAVIGATION HANDLER ---
+    const handleDelayedNavigation = (path, stateData, message = "Processing Data...") => {
+        setIsProcessing(true);
+        setLoadingMessage(message);
+
+        // 1.5 Second Artificial Delay
+        setTimeout(() => {
+            navigate(path, { state: stateData });
+            // We don't strictly need to set processing false here because 
+            // the component will unmount/navigate away, but it's good practice.
+            setIsProcessing(false);
+        }, 1500);
+    };
     // ⬇️ ADD THIS USEEFFECT ⬇️
     // This clears the "redirect" instruction from the browser history
     // so that if you refresh later, it doesn't force you back to 'breakdown'.
@@ -663,7 +691,7 @@ const PropertyComparison = () => {
             } else {
                 totalHoldingMonths = (parseFloat(years) || 0) * 12;
             }
-            
+
             const valYears = totalHoldingMonths / 12;
             const displayYears = Math.round(valYears * 100) / 100;
             const possessionMonths = getSafeValue(selectedProperty?.possessionMonths) || 0;
@@ -678,7 +706,7 @@ const PropertyComparison = () => {
                 ? (getSafeValue(assumptions.clpDurationYears) * 12)
                 : possessionMonths;
 
-            let lastDemandMonth = possessionMonths; 
+            let lastDemandMonth = possessionMonths;
             if (paymentPlan === 'clp') {
                 const explicitLast = getSafeValue(assumptions.lastBankDisbursementMonth);
                 const constructionEnd = getSafeValue(assumptions.clpDurationYears) * 12;
@@ -731,11 +759,11 @@ const PropertyComparison = () => {
             let idcSchedule = [];
             let truePrePossessionTotal = 0;
             let totalLifetimeInterest = 0;
-            
+
             const isManualMode = assumptions.homeLoanStartMode === 'manual';
 
             if (paymentPlan === 'clp' && homeLoanAmount > 0) {
-                
+
                 // ============================================================
                 // 1. GENERATE SCHEDULE FIRST (Moved OUT of the else block)
                 //    This ensures 'idcSchedule' exists for BOTH strategies.
@@ -757,7 +785,7 @@ const PropertyComparison = () => {
                         const slabMonthlyInterest = (slabAmount * (hlRate / 100)) / 12;
                         const duration = Math.max(0, possessionMonths - month);
                         const thisSlabTotalCost = slabMonthlyInterest * duration;
-                        
+
                         idcSchedule.push({
                             slabNo: i + 1,
                             releaseMonth: month,
@@ -773,7 +801,7 @@ const PropertyComparison = () => {
                 // ============================================================
                 if (isManualMode) {
                     // MANUAL:
-                    const manualStart = getSafeValue(assumptions.homeLoanStartMonth); 
+                    const manualStart = getSafeValue(assumptions.homeLoanStartMonth);
                     const mStart = (manualStart !== undefined && manualStart !== null) ? parseInt(manualStart) : 0;
 
                     const manualResult = calculateManualStrategy({
@@ -795,7 +823,7 @@ const PropertyComparison = () => {
                     monthlyIDCEMI = manualResult.monthlyIDCEMI;
                     truePrePossessionTotal = manualResult.truePrePossessionTotal;
                     // Note: idcSchedule is already updated in memory
-                    
+
                 } else {
                     // DEFAULT: Run standard simulation loop for IDC
                     let cumulativeDisbursement = 0;
@@ -853,7 +881,7 @@ const PropertyComparison = () => {
 
                     const activeMonths = Math.min(loopEnd, fundingEndMonth) - startMonth + 1;
                     monthlyIDCEMI = activeMonths > 0 ? (totalIDC / activeMonths) : 0;
-                    
+
                     // Update schedule with calculated interest costs
                     idcSchedule = idcSchedule.map(slab => ({
                         ...slab,
@@ -875,7 +903,7 @@ const PropertyComparison = () => {
             const personalLoan2InterestPaid = personalLoan2Amount > 0 ? calculateTotalInterestPaid(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term, pl2PaymentsMade) : 0;
 
             const totalLoanOutstanding = homeLoanOutstanding + personalLoan1Outstanding + personalLoan2Outstanding;
-            const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC; 
+            const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC;
             const saleValue = propertySize * exitPrice;
             const leftoverCash = saleValue - totalLoanOutstanding;
             const trueNetProfit = leftoverCash - totalEMIPaid - downPaymentAmount;
@@ -1047,14 +1075,20 @@ const PropertyComparison = () => {
     };
 
     const handleAddProperty = () => {
-        const newId = propertyData.properties.length + 1;
+        // 1. FIX: Find the highest ID currently in the list
+        // If list is empty, start at 0 (so next is 1). If not, take the max ID found.
+        const maxId = propertyData.properties.reduce((max, prop) => (prop.id > max ? prop.id : max), 0);
+
+        // 2. Generate new unique ID
+        const newId = maxId + 1;
+
         const newProperty = {
             id: newId,
             size: 1000,
             name: `Property ${newId}`,
-            location: 'New Location',
-            rating: 4.0,
-            isHighlighted: false,
+            location: '',
+            // rating: 4.0, // (Optional based on your existing object structure)
+            // isHighlighted: false,
             possessionMonths: 24
         };
 
@@ -1198,11 +1232,30 @@ const PropertyComparison = () => {
     );
 
     const handleAnalyzeClick = () => {
-        setActiveTab('overview');
-        setShowDataEnteredAlert(true);
+        // 1. Start Loading Animation
+        setIsProcessing(true);
+        setLoadingMessage("Analyzing Property Parameters...");
+
+        // 2. Wait 1.5 seconds before showing results
         setTimeout(() => {
-            setShowDataEnteredAlert(false);
-        }, 3000);
+            // A. Switch to Overview Tab
+            setActiveTab('overview');
+
+            // B. Stop Loading
+            setIsProcessing(false);
+
+            // C. Show Success Alert
+            setShowDataEnteredAlert(true);
+
+            // D. Scroll to top to see results
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+
+            // E. Auto-hide alert after 3 seconds
+            setTimeout(() => {
+                setShowDataEnteredAlert(false);
+            }, 3000);
+
+        }, 1500);
     };
 
     const handlePaymentPlanChange = (plan) => {
@@ -1464,7 +1517,7 @@ const PropertyComparison = () => {
                             return (
                                 <div key={step.id} className="text-center" style={{ width: '100px' }}>
                                     <div
-                                        className={`rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 shadow-sm ${isActive ? 'bg-primary text-white scale-110' :
+                                        className={`rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 shadow-sm ${isActive ? 'badge bg-primary text-white scale-110' :
                                             isCompleted ? 'bg-success text-white' : 'bg-white text-muted border'
                                             }`}
                                         style={{
@@ -1516,24 +1569,34 @@ const PropertyComparison = () => {
 
                     {/* NEXT / ANALYZE BUTTON */}
                     {currentStep < steps.length ? (
-                        // Logic for Steps 1, 2, 3 (Already correct)
+                        // Standard Next Button (Steps 1, 2, 3)
                         <button className="btn btn-primary rounded-pill px-4" onClick={handleNextStep}>
                             Next Step <i className="bi bi-arrow-right ms-2"></i>
                         </button>
                     ) : (
-                        // Logic for Step 4 (THE FIX IS HERE)
-                        <button
-                            className="btn btn-primary rounded-pill px-5 shadow-lg"
-                            onClick={() => {
-                                // 1. Run Validation First
-                                if (validateCurrentStep()) {
-                                    // 2. Only if valid, run the analyze function
-                                    handleAnalyzeClick();
-                                }
-                            }}
-                        >
-                            Analyze Property <i className="bi bi-graph-up ms-2"></i>
-                        </button>
+                        // Final Step: Show BOTH Preview & Analyze Buttons
+                        <div className="d-flex gap-3">
+
+                            {/* ✅ NEW: Preview Button */}
+                            <button
+                                className="btn btn-primary rounded-pill px-5 shadow-lg"
+                                onClick={() => setShowPreview(true)}
+                            >
+                                <i className="bi bi-eye me-2"></i>Review Inputs
+                            </button>
+
+                            {/* Existing Analyze Button */}
+                            <button
+                                className="btn btn-primary rounded-pill px-5 shadow-lg"
+                                onClick={() => {
+                                    if (validateCurrentStep()) {
+                                        handleAnalyzeClick();
+                                    }
+                                }}
+                            >
+                                Analyze Property <i className="bi bi-graph-up ms-2"></i>
+                            </button>
+                        </div>
                     )}
                 </div>
             </div>
@@ -1596,7 +1659,7 @@ const PropertyComparison = () => {
                                             <div className="row g-3">
                                                 {propertyData.properties.map((property, index) => (
                                                     <div key={property.id} className="col-12 col-md-6 col-lg-5 col-xl-4">
-                                                        <div className="card h-100 shadow-sm border-2">
+                                                        <div className="card h-100 shadow-sm border-2 me-4">
                                                             <div className="card-header bg-white d-flex justify-content-between align-items-center py-2">
                                                                 <span className="badge bg-primary px-3 py-2">Property #{property.id}</span>
                                                                 {propertyData.properties.length > 1 && (
@@ -1950,13 +2013,6 @@ const PropertyComparison = () => {
                                                         </div>
                                                     </div>
                                                 </div>
-
-                                                <div className="alert alert-info mb-0 py-2">
-                                                    <small>
-                                                        <i className="bi bi-info-circle me-2"></i>
-                                                        <strong>Note:</strong> IDC Interest continues to accumulate until possession, even after the last bank disbursement is made.
-                                                    </small>
-                                                </div>
                                             </>
                                         )
                                     )
@@ -2104,7 +2160,6 @@ const PropertyComparison = () => {
                                     )
                                 )}
 
-                                {/* Personal Loan 1 Information */}
                                 {/* Personal Loan 1 Details (Accordion) */}
                                 {renderAccordionSection(
                                     'pl1_details',
@@ -2543,6 +2598,192 @@ const PropertyComparison = () => {
             </button>
         </div>
     );
+    // Helper: Strategy Comparison Card (Theme Adaptive)
+    const renderStrategyComparison = () => {
+        // 1. GET DATA
+        const breakdown = calculatedData.detailedBreakdown;
+        const { assumptions, paymentPlan } = propertyData;
+
+        // 🛑 GUARD CLAUSE: Only show for CLP
+        if (paymentPlan !== 'clp') return null;
+
+        // Safety check
+        if (!breakdown || !breakdown.homeLoanAmount) return null;
+
+        const hlAmount = breakdown.homeLoanAmount;
+        const rate = assumptions.homeLoanRate;
+        const tenure = assumptions.homeLoanTerm;
+        const possession = breakdown.possessionMonths;
+        const fullEMI = calculateEMI(hlAmount, rate, tenure);
+
+        // --- SIMULATION A: STANDARD CLP ---
+        let standardTotalPaid = 0;
+        let cumulativeDisbursement = 0;
+
+        const slabCount = breakdown.idcSchedule?.length || 6;
+        const slabAmount = hlAmount / slabCount;
+        const disbursementInterval = assumptions.bankDisbursementInterval || 3;
+
+        for (let m = 1; m <= possession; m++) {
+            if (m % disbursementInterval === 0 && cumulativeDisbursement < hlAmount) {
+                cumulativeDisbursement += slabAmount;
+                if (cumulativeDisbursement > hlAmount) cumulativeDisbursement = hlAmount;
+            }
+            standardTotalPaid += (cumulativeDisbursement * (rate / 100)) / 12;
+        }
+        const standardBalance = hlAmount;
+
+        // --- SIMULATION B: SMART SAVER ---
+        let manualTotalPaid = 0;
+        let manualPrincipalPaid = 0;
+        let manualLoanBalance = 0;
+        cumulativeDisbursement = 0;
+
+        for (let m = 1; m <= possession; m++) {
+            if (m % disbursementInterval === 0 && cumulativeDisbursement < hlAmount) {
+                cumulativeDisbursement += slabAmount;
+                manualLoanBalance += slabAmount;
+                if (cumulativeDisbursement > hlAmount) cumulativeDisbursement = hlAmount;
+            }
+            const monthlyInterest = (manualLoanBalance * (rate / 100)) / 12;
+            const principalComponent = fullEMI - monthlyInterest;
+
+            manualLoanBalance -= principalComponent;
+            manualPrincipalPaid += principalComponent;
+            manualTotalPaid += fullEMI;
+        }
+        const profit = manualPrincipalPaid;
+
+        // --- REUSABLE UI CARD COMPONENT (DARK MODE READY) ---
+        const PlanCard = ({ title, price, subtitle, features, isRecommended, balance, balanceLabel }) => (
+            <div
+                className={`card h-100 glass-card ${isRecommended ? 'border-primary border-2 shadow-lg scale-105' : 'border-secondary border-opacity-25 shadow-sm'}`}
+                style={{
+                    borderRadius: '16px',
+                    // No hardcoded background color here; glass-card handles it
+                    position: 'relative',
+                    overflow: 'hidden',
+                    transition: 'all 0.3s ease',
+                    boxShadow: isRecommended
+                        ? '0 15px 40px -5px rgba(13, 110, 253, 0.25)' // Blue Glow for Recommended
+                        : '0 8px 24px -4px rgba(0, 0, 0, 0.1)'
+                }}
+            >
+
+                {isRecommended && (
+                    <div className="position-absolute top-0 end-0 bg-primary text-white fw-bold px-3 py-1 small"
+                        style={{ borderBottomLeftRadius: '12px' }}>
+                        Smart Choice
+                    </div>
+                )}
+
+                <div className="card-body p-4 text-center d-flex flex-column">
+                    <h5 className="text-muted text-uppercase small fw-bold mb-3">{title}</h5>
+
+                    <div className="mb-1">
+                        <span className={`h2 fw-bold ${isRecommended ? 'text-primary' : ''}`}>{price}</span>
+                    </div>
+                    <small className="text-muted mb-4">{subtitle}</small>
+
+                    {/* Inner Box: Uses opacity for theme adaptability */}
+                    <div className={`my-3 py-3 border-top border-bottom rounded ${isRecommended ? 'bg-primary bg-opacity-10 border-primary border-opacity-10' : 'bg-secondary bg-opacity-10 border-secondary border-opacity-10'}`}>
+                        <small className="d-block text-muted mb-1">Loan Balance at Possession</small>
+                        <div className={`fw-bold fs-5 ${isRecommended ? 'text-success' : 'text-danger'}`}>
+                            {balance}
+                        </div>
+                        <small className={isRecommended ? 'text-success' : 'text-danger'}>
+                            {balanceLabel}
+                        </small>
+                    </div>
+
+                    <div className="text-start mt-3 flex-grow-1">
+                        {features.map((feat, idx) => (
+                            <div key={idx} className="d-flex align-items-start mb-2 small">
+                                <i className={`bi ${feat.icon} me-2 fs-6 mt-1`}></i>
+                                {/* text-reset ensures it uses the theme's text color (white in dark, black in light) */}
+                                <span className="text-reset opacity-75">{feat.text}</span>
+                            </div>
+                        ))}
+                    </div>
+
+                    {isRecommended && (
+                        <div className="mt-3">
+                            <div className="badge bg-success w-100 py-2 shadow-sm">
+                                <i className="bi bi-piggy-bank me-2"></i>
+                                Save {formatLakhs(profit)} Principal
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+
+        return (
+            <div className="mb-5">
+                <div className="text-center mb-4">
+                    <h4 className="fw-bold gradient-text">Standard CLP VS Full EMI</h4>
+                </div>
+
+                <div className="row g-4 align-items-center justify-content-center">
+                    {/* STANDARD PLAN */}
+                    <div className="col-md-5">
+                        <PlanCard
+                            title="Standard CLP"
+                            price={formatCurrency(standardTotalPaid)}
+                            subtitle="Total Paid till Possession"
+                            balance={formatLakhs(standardBalance)}
+                            balanceLabel="100% Principal Remaining"
+                            isRecommended={false}
+                            features={[
+                                { icon: "bi-check-circle-fill text-success", text: "Lower monthly burden initially" },
+                                { icon: "bi-check-circle-fill text-success", text: "Cash flow friendly" },
+                                { icon: "bi-x-circle-fill text-danger", text: "Zero principal reduction" },
+                                { icon: "bi-x-circle-fill text-danger", text: "Higher interest cost long-term" },
+                            ]}
+                        />
+                    </div>
+
+                    {/* SMART SAVER PLAN */}
+                    <div className="col-md-5">
+                        <PlanCard
+                            title="Smart Saver (Full EMI)"
+                            price={formatCurrency(manualTotalPaid)}
+                            subtitle={`Pay +${formatCurrency(manualTotalPaid - standardTotalPaid)} more upfront`}
+                            balance={formatLakhs(hlAmount - profit)}
+                            balanceLabel={`Reduced by ${formatLakhs(profit)}`}
+                            isRecommended={true}
+                            features={[
+                                { icon: "bi-check-circle-fill text-success", text: "Massive Principal Reduction" },
+                                { icon: "bi-check-circle-fill text-success", text: "Lower Loan Balance = Higher Profit" },
+                                { icon: "bi-check-circle-fill text-success", text: "Paid off significant debt early" },
+                                { icon: "bi-exclamation-triangle-fill text-warning", text: "High initial monthly commitment" },
+                            ]}
+                        />
+                    </div>
+                </div>
+            </div>
+        );
+    };
+    // Helper: Empty State UI (Standardized)
+    const RenderEmptyState = ({ title, message }) => (
+        <div className="d-flex flex-column align-items-center justify-content-center text-center py-5 mt-5">
+            <div className="glass-card mb-4 ps-4 mt-4 pt-4">
+                <div className="mb-4 text-muted opacity-50">
+                    <i className="bi bi-clipboard-data" style={{ fontSize: '4rem' }}></i>
+                </div>
+                <h3 className="fw-bold text-secondary mb-3">{title}</h3>
+                <p className="text-muted mb-4">{message}</p>
+
+                <button
+                    className="btn btn-primary rounded-pill px-4 py-2 shadow-sm scale-hover"
+                    onClick={() => setActiveTab('inputs')}
+                >
+                    <i className="bi bi-pencil-square me-2"></i>
+                    Start Your Analysis
+                </button>
+            </div>
+        </div>
+    );
 
     const renderOverviewTab = () => {
         const breakdown = calculatedData.detailedBreakdown;
@@ -2563,6 +2804,14 @@ const PropertyComparison = () => {
                         Go Back to Inputs
                     </button>
                 </div>
+            );
+        }
+        if (breakdown.totalCost === 0) {
+            return (
+                <RenderEmptyState
+                    title="No Analysis Generated Yet"
+                    message="It looks like you haven't entered any property details. Head over to the Input Parameters tab to configure your investment model."
+                />
             );
         }
 
@@ -2861,6 +3110,10 @@ const PropertyComparison = () => {
                 {/* 6. Key Insights */}
                 {renderKeyInsights(breakdown)}
 
+                <div style={{ maxWidth: '1300px', margin: '0 auto' }}>
+                    {renderStrategyComparison()}
+                </div>
+
                 {/* 7. Action Buttons */}
                 <div style={{ maxWidth: '1300px', margin: '0 auto' }}>
                     <div className="row g-3 mb-5">
@@ -2941,6 +3194,14 @@ const PropertyComparison = () => {
                 </div>
             );
         }
+        if (breakdown.totalCost === 0) {
+            return (
+                <RenderEmptyState
+                    title="No Calculation Generated Yet"
+                    message="It looks like you haven't entered any property details. Head over to the Input Parameters tab to configure your investment model."
+                />
+            );
+        }
 
         // ✅ FIX: Wrapped in 'central-container' to limit width and center it
         return (
@@ -2995,21 +3256,19 @@ const PropertyComparison = () => {
                                             <div
                                                 className="p-2 rounded border text-dark property-card-hover h-100"
                                                 style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
-                                                onClick={() => navigate('/monthly-breakdown', {
-                                                    state: {
-                                                        idcSchedule: breakdown.idcSchedule,
-                                                        pl1EMI: breakdown.personalLoan1EMI,
-                                                        possessionMonths: breakdown.possessionMonths,
-                                                        totalHoldingMonths: breakdown.totalHoldingMonths,
-                                                        homeLoanAmount: breakdown.homeLoanAmount,
-                                                        interestRate: propertyData.assumptions.homeLoanRate,
-                                                        propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
-                                                        homeLoanTerm: propertyData.assumptions.homeLoanTerm, // e.g., 20 years
-                                                        lastBankDisbursementMonth: getSafeValue(propertyData.assumptions.lastBankDisbursementMonth) || null,
-                                                        homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
-                                                        manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth)
-                                                    }
-                                                })}
+                                                onClick={() => handleDelayedNavigation('/monthly-breakdown', {
+                                                    idcSchedule: breakdown.idcSchedule,
+                                                    pl1EMI: breakdown.personalLoan1EMI,
+                                                    possessionMonths: breakdown.possessionMonths,
+                                                    totalHoldingMonths: breakdown.totalHoldingMonths,
+                                                    homeLoanAmount: breakdown.homeLoanAmount,
+                                                    interestRate: propertyData.assumptions.homeLoanRate,
+                                                    propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
+                                                    homeLoanTerm: propertyData.assumptions.homeLoanTerm, // e.g., 20 years
+                                                    lastBankDisbursementMonth: getSafeValue(propertyData.assumptions.lastBankDisbursementMonth) || null,
+                                                    homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
+                                                    manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth)
+                                                }, "Calculating Monthly Breakdown...")}
                                             >
                                                 {/* Header Section */}
                                                 <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-10">
@@ -3039,20 +3298,18 @@ const PropertyComparison = () => {
                                                 <div
                                                     className="p-2 rounded border text-dark property-card-hover h-100"
                                                     style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
-                                                    onClick={() => navigate('/schedule', {
-                                                        state: {
-                                                            idcSchedule: breakdown.idcSchedule,
-                                                            pl1EMI: breakdown.personalLoan1EMI,
-                                                            totalIDC: breakdown.totalIDC,
-                                                            totalHoldingMonths: breakdown.totalHoldingMonths,
-                                                            propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
-                                                            possessionMonths: breakdown.possessionMonths,
-                                                            totalPaid: breakdown.prePossessionTotal,
-                                                            homeLoanAmount: breakdown.homeLoanAmount,
-                                                            lastBankDisbursementMonth: propertyData.assumptions.lastBankDisbursementMonth,
-                                                            interestRate: propertyData.assumptions.homeLoanRate
-                                                        }
-                                                    })}
+                                                    onClick={() => handleDelayedNavigation('/schedule', {
+                                                        idcSchedule: breakdown.idcSchedule,
+                                                        pl1EMI: breakdown.personalLoan1EMI,
+                                                        totalIDC: breakdown.totalIDC,
+                                                        totalHoldingMonths: breakdown.totalHoldingMonths,
+                                                        propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
+                                                        possessionMonths: breakdown.possessionMonths,
+                                                        totalPaid: breakdown.prePossessionTotal,
+                                                        homeLoanAmount: breakdown.homeLoanAmount,
+                                                        lastBankDisbursementMonth: propertyData.assumptions.lastBankDisbursementMonth,
+                                                        interestRate: propertyData.assumptions.homeLoanRate
+                                                    }, "Calculating IDC Slabs...")}
                                                 >
                                                     {/* Header Row with Title and Button */}
                                                     <div className="d-flex justify-content-between align-items-center mb-2 pb-1">
@@ -3344,6 +3601,245 @@ const PropertyComparison = () => {
         }
     };
 
+    // Helper: Full Screen Loading Overlay (Calculation Themed)
+    const renderLoadingOverlay = () => {
+        if (!isProcessing) return null;
+
+        return (
+            <div
+                className="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column justify-content-center align-items-center"
+                style={{
+                    zIndex: 9999,
+                    backgroundColor: 'rgba(15, 23, 42, 0.9)', // Darker background for contrast
+                    backdropFilter: 'blur(8px)'
+                }}
+            >
+                {/* Custom CSS Animation */}
+                <div className="loader-container mb-4">
+                    <div className="loader-ring"></div>
+                    <i className="bi bi-calculator-fill loader-icon"></i>
+                </div>
+
+                {/* Text */}
+                <h4 className="text-white fw-light animate-fade-in mb-1">{loadingMessage}</h4>
+                <div className="d-flex align-items-center text-white-50 small mt-2">
+                    <span className="spinner-grow spinner-grow-sm me-2" style={{ width: '0.5rem', height: '0.5rem' }} role="status"></span>
+                    Crunching the numbers...
+                </div>
+            </div>
+        );
+    };
+    // Helper: Renders the Preview Modal
+    const renderPreviewModal = () => {
+        if (!showPreview) return null;
+
+        const { assumptions, purchasePrice, otherCharges, stampDuty, gstPercentage, paymentPlan, properties } = propertyData;
+        const selectedProp = properties.find(p => p.id === userSelections.selectedPropertyId) || properties[0];
+
+        // 1. Navigation Helper: Closes modal -> Goes to specific step
+        const handleEditStep = (stepNumber) => {
+            setShowPreview(false);
+            setCurrentStep(stepNumber);
+        };
+
+        // 2. UI Helper: Consistent Row for Data
+        const PreviewRow = ({ label, value }) => (
+            <div className="d-flex justify-content-between align-items-center mb-2">
+                <span className="text-muted small">{label}</span>
+                <span className="fw-bold small">{value || '-'}</span>
+            </div>
+        );
+
+        // 3. UI Helper: Header with Edit Pencil
+        const SectionHeader = ({ title, icon, targetStep }) => (
+            <div className="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary border-opacity-10 pb-2">
+                <h6 className="fw-bold gradient-text opacity-75 small mb-0 text-uppercase">
+                    <i className={`bi ${icon} me-2`}></i>{title}
+                </h6>
+                <button
+                    className="btn btn-sm btn-link text-decoration-none p-0 text-secondary opacity-75 hover-opacity-100"
+                    onClick={() => handleEditStep(targetStep)}
+                    title={`Edit ${title}`}
+                >
+                    <i className="bi bi-pencil-square fs-6"></i>
+                </button>
+            </div>
+        );
+
+        return (
+            <>
+                {/* Backdrop */}
+                <div
+                    className="position-fixed top-0 start-0 w-100 h-100 bg-dark"
+                    style={{ zIndex: 1040, opacity: 0.7, backdropFilter: 'blur(4px)' }}
+                    onClick={() => setShowPreview(false)}
+                ></div>
+
+                {/* Modal Content */}
+                <div
+                    className="position-fixed top-50 start-50 translate-middle w-100"
+                    style={{ maxWidth: '900px', zIndex: 1050, maxHeight: '95vh', overflowY: 'auto' }}
+                >
+                    <div className="glass-card p-0 m-3 shadow-lg">
+
+                        {/* Header */}
+                        <div className="p-4 border-bottom border-secondary border-opacity-10 d-flex justify-content-between align-items-center">
+                            <div>
+                                <h4 className="fw-bold gradient-text mb-1">
+                                    <i className="bi bi-clipboard-check me-2"></i>Review Inputs
+                                </h4>
+                                <p className="mb-0 text-muted small">Verify parameters before analysis</p>
+                            </div>
+                            <button
+                                onClick={() => setShowPreview(false)}
+                                className="btn btn-sm btn-outline-secondary rounded-circle"
+                                style={{ width: '32px', height: '32px', padding: 0 }}
+                            >
+                                <i className="bi bi-x-lg "></i>
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-4">
+
+                            {/* --- ROW 1: STEP 1 (Property & Costs) --- */}
+                            <div className="row g-4 mb-4">
+                                <div className="col-md-6">
+                                    <div className="p-3 rounded bg-light bg-opacity-10 border border-secondary border-opacity-10 h-100">
+                                        <SectionHeader title="Property Details" icon="bi-building" targetStep={1} />
+
+                                        <PreviewRow label="Name" value={selectedProp?.name} />
+                                        <PreviewRow label="Location" value={selectedProp?.location} />
+                                        <PreviewRow label="Size" value={`${selectedProp?.size} sq.ft`} />
+                                        <PreviewRow label="Possession" value={`${selectedProp?.possessionMonths} Months`} />
+                                    </div>
+                                </div>
+                                <div className="col-md-6">
+                                    <div className="p-3 rounded bg-light bg-opacity-10 border border-secondary border-opacity-10 h-100">
+                                        <SectionHeader title="Cost Breakdown" icon="bi-tag" targetStep={1} />
+
+                                        <PreviewRow label="Purchase Price" value={`${formatCurrency(purchasePrice)}/sq.ft`} />
+                                        <PreviewRow label="Other Charges" value={formatCurrency(otherCharges)} />
+                                        <PreviewRow label="Stamp Duty" value={`${stampDuty}%`} />
+                                        <PreviewRow label="GST" value={`${gstPercentage}%`} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* --- ROW 2: STEP 2 (Payment Plan) --- */}
+                            <div className="mb-4">
+                                <SectionHeader title="Payment Plan & Timeline" icon="bi-credit-card" targetStep={2} />
+
+                                <div className="row g-3">
+                                    <div className="col-md-4">
+                                        <div className="mb-2"><span className="text-muted small d-block">Plan Type</span><span className="fw-bold">{paymentPlan.toUpperCase()}</span></div>
+                                    </div>
+                                    <div className="col-md-4">
+                                        <div className="mb-2"><span className="text-muted small d-block">Investment Period</span><span className="fw-bold">{assumptions.investmentPeriod} {assumptions.holdingPeriodUnit || 'Years'}</span></div>
+                                    </div>
+                                    {paymentPlan === 'clp' && (
+                                        <div className="col-md-4">
+                                            <div className="mb-2"><span className="text-muted small d-block">Construction</span><span className="fw-bold">{assumptions.clpDurationYears} Yrs</span></div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* --- ROW 3: STEP 3 (Funding Mix) --- */}
+                            <div className="mb-4">
+                                <SectionHeader title="Funding Mix & Loans" icon="bi-bank" targetStep={3} />
+
+                                <div className="table-responsive rounded border border-secondary border-opacity-10">
+                                    <table className="table table-hover table-borderless table-sm mb-0 small bg-transparent">
+                                        <thead className="bg-light bg-opacity-10 border-bottom border-secondary border-opacity-10">
+                                            <tr>
+                                                <th className="fw-bold ps-3 gradient-text">Source</th>
+                                                <th className="fw-bold text-end gradient-text">Share</th>
+                                                <th className="fw-bold text-end gradient-text">Rate</th>
+                                                <th className="fw-bold text-end gradient-text">Tenure</th>
+                                                <th className="fw-bold text-end gradient-text pe-3">Start</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td className="ps-3">Down Payment</td>
+                                                <td className="text-end">{assumptions.downPaymentShare}%</td>
+                                                <td className="text-end text-muted">-</td>
+                                                <td className="text-end text-muted">-</td>
+                                                <td className="text-end pe-3">Month 0</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="ps-3 fw-bold text-primary">Home Loan</td>
+                                                <td className="text-end">{assumptions.homeLoanShare}%</td>
+                                                <td className="text-end">{assumptions.homeLoanRate}%</td>
+                                                <td className="text-end">{assumptions.homeLoanTerm} Yr</td>
+                                                <td className="text-end pe-3">
+                                                    {assumptions.homeLoanStartMode === 'manual'
+                                                        ? `Month ${assumptions.homeLoanStartMonth}`
+                                                        : `Auto (+${assumptions.homeLoanStartMonth}mo)`}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="ps-3">Personal Loan 1</td>
+                                                <td className="text-end">{assumptions.personalLoan1Share}%</td>
+                                                <td className="text-end">{assumptions.personalLoan1Rate}%</td>
+                                                <td className="text-end">{assumptions.personalLoan1Term} Yr</td>
+                                                <td className="text-end pe-3">Month {assumptions.personalLoan1StartMonth}</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="ps-3">Personal Loan 2</td>
+                                                <td className="text-end">{assumptions.personalLoan2Share}%</td>
+                                                <td className="text-end">{assumptions.personalLoan2Rate}%</td>
+                                                <td className="text-end">{assumptions.personalLoan2Term} Yr</td>
+                                                <td className="text-end pe-3">Possession +{assumptions.personalLoan2StartMonth}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* --- ROW 4: STEP 4 (Exit Scenarios) --- */}
+                            <div className="mb-2">
+                                <SectionHeader title="Exit Price Scenarios" icon="bi-graph-up-arrow" targetStep={4} />
+
+                                <div className="d-flex flex-wrap gap-2">
+                                    <div className="px-3 py-2 rounded border border-primary bg-primary bg-opacity-10">
+                                        <span className="d-block small text-primary mb-1 fw-bold">Selected</span>
+                                        <span className="fw-bold">{formatCurrency(userSelections.selectedExitPrice)}</span>
+                                    </div>
+                                    {userSelections.scenarioExitPrices.map((price, idx) => (
+                                        <div key={idx} className="px-3 py-2 rounded border border-secondary border-opacity-25 bg-light bg-opacity-10">
+                                            <span className="d-block small text-muted mb-1">Scenario {idx + 1}</span>
+                                            <span className="fw-bold">{formatCurrency(price)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="p-3 border-top border-secondary border-opacity-10 bg-light bg-opacity-10 d-flex justify-content-end gap-2">
+                            <button
+                                className="btn btn-outline-secondary px-4 rounded-pill"
+                                onClick={() => setShowPreview(false)}
+                            >
+                                Close
+                            </button>
+                            <button
+                                className="btn btn-primary px-4 rounded-pill shadow-sm"
+                                onClick={() => setShowPreview(false)}
+                            >
+                                <i className="bi bi-check-lg me-2"></i>Confirm Details
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            </>
+        );
+    };
+
     return (
         <div className="property-comparison">
 
@@ -3435,6 +3931,8 @@ const PropertyComparison = () => {
                     </div>
                 </div>
             </div>
+            {renderLoadingOverlay()}
+            {renderPreviewModal()}
         </div>
     );
 };

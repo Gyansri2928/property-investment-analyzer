@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { PropertyComparison } from './components';
 import Auth from './components/Auth';
 import IdcSchedulePage from './components/idcschedule'; // Import the new page
 import MonthlyBreakdownPage from './components/monthlybreakdown';
+import PrivacyPolicy from './pages/privacypolicy';
+import TermsOfService from './pages/termsncond';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 import './App.css';
@@ -169,17 +171,20 @@ function App() {
           <div className="container">
             <div className="header-content">
               <div className="logo-title">
-                <img
-                  src="/logo_124.png"
-                  alt="Property Investment Analyzer Logo"
-                  className="app-logo"
-                  style={{
-                    height: '75px', // Increased size
-                    width: 'auto',
-                    filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))', // Added elevation/shadow
-                    marginRight: '15px'
-                  }}
-                />
+                <Link to="/" style={{ textDecoration: 'none', display: 'block' }}>
+                  <img
+                    src="/logo_124.png"
+                    alt="Property Investment Analyzer Logo"
+                    className="app-logo"
+                    style={{
+                      height: '75px',
+                      width: 'auto',
+                      filter: 'drop-shadow(0 4px 6px rgba(0,0,0,0.2))',
+                      marginRight: '15px',
+                      cursor: 'pointer' // Makes it obvious it's clickable
+                    }}
+                  />
+                </Link>
                 <div className="title-section">
                   <h1 className="app-title">
                     Property Investment Analyzer
@@ -349,37 +354,38 @@ function App() {
 
               {/* --- ROUTE 4: MONTHLY BREAKDOWN --- */}
               <Route path="/monthly-breakdown" element={<MonthlyBreakdownPage />} />
+              <Route path="/privacy-policy" element={<PrivacyPolicy />} />
+              <Route path="/terms-of-service" element={<TermsOfService />} />
             </Routes>
           </div>
         </main>
 
         {/* 4.<footer>*/}
-        <footer className="app-footer" style={{ backgroundColor: '#50C878', color: '#FFFFFF' }}>
+        <footer
+          className={`app-footer`}
+          style={{ position: 'relative' }}
+        >
           <div className="container text-center py-3">
 
             {/* 1. Links (Top & Prominent) */}
             <div className="mb-3">
               {/* Privacy Policy */}
-              <a
-                href="/docs/Privacy Policy.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75"
+              <Link
+                to="/privacy-policy"
+                className="text-reset text-decoration-none mx-3 fw-bold hover-opacity-75"
               >
                 Privacy Policy
-              </a>
+              </Link>
 
               <span className="opacity-25">|</span>
 
               {/* Terms of Service */}
-              <a
-                href="/docs/Terms of Service -- PIA.docx.pdf"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75"
+              <Link
+                to="/terms-of-service"
+                className="text-reset text-decoration-none mx-3 fw-bold hover-opacity-75"
               >
                 Terms of Service
-              </a>
+              </Link>
 
               <span className="opacity-25">|</span>
 
@@ -388,7 +394,7 @@ function App() {
                 href="https://agenthumsolutions.com/contact/"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="text-white text-decoration-none mx-3 fw-bold hover-opacity-75"
+                className="text-reset text-decoration-none mx-3 fw-bold hover-opacity-75"
               >
                 Contact Us
               </a>
