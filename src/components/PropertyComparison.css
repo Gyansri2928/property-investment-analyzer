@@ -939,3 +939,57 @@ body.dark-theme .btn-outline-primary:hover {
     50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 15px var(--brand-color); }
     100% { transform: scale(0.85); opacity: 0.7; }
 }
+/* --- PRINT STYLES (Add to PropertyComparison.css) --- */
+@media print {
+  /* 1. HIDE EVERYTHING ELSE */
+  .app-header, 
+  .app-footer, 
+  .nav-buttons, 
+  .btn, 
+  .no-print,
+  .verification-banner,
+  .central-container, /* Hides the interactive tab view */
+  .property-comparison > .container-fluid > .row { /* Hides main layout */
+    display: none !important;
+  }
+
+  /* 2. SHOW THE PRINT REPORT CONTAINER */
+  .print-only-container {
+    display: block !important;
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: white;
+    font-size: 12pt;
+    color: black;
+    z-index: 9999;
+  }
+
+  /* 3. PRINT FORMATTING TWEAKS */
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  
+  .card, .glass-card {
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    break-inside: avoid; /* Prevents cutting cards in half across pages */
+  }
+
+  /* Ensure tables print nicely */
+  .table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  .table th, .table td {
+    border: 1px solid #ccc !important;
+    padding: 8px !important;
+  }
+}
+
+/* Hide print container on normal screen */
+.print-only-container {
+  display: none;
+}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
 import { PropertyComparison } from './components';
 import Auth from './components/Auth';
 import IdcSchedulePage from './components/idcschedule'; // Import the new page
@@ -16,6 +16,19 @@ import EmailVerification from './pages/EmailVerification';
 import MiniWeather from './components/MiniWeather';
 import ThemeToggle from './components/ThemeToggle';
 
+const ScrollToTop = () => {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: 'instant' // Instant jump is better for new pages than 'smooth'
+    });
+  }, [pathname]);
+
+  return null;
+};
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -164,6 +177,7 @@ function App() {
 
   return (
     <Router>
+      <ScrollToTop />
       <div className="App">
 
         {/* 1. Header*/}
@@ -190,7 +204,7 @@ function App() {
                     Property Investment Analyzer
                   </h1>
                   <p className="app-subtitle">
-                    Compare and analyze property investments with detailed financial breakdowns
+                    Strategic Investment Insights • By <strong>Agenthum AI Solutions</strong>
                   </p>
                   <div className="environment-badge">
                     {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
