@@ -294,16 +294,6 @@ const PropertyComparisonDesktop = () => {
     // --- LOADING OVERLAY STATE ---
     const [isProcessing, setIsProcessing] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('Analyzing...');
-    const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-
-    // --- EFFECT: Handle Window Resize ---
-    useEffect(() => {
-        const handleResize = () => {
-            setIsMobile(window.innerWidth < 768);
-        };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
 
     // --- DELAYED NAVIGATION HANDLER ---
     const handleDelayedNavigation = (path, stateData, message = "Processing Data...") => {

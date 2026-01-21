@@ -14,6 +14,7 @@ import { auth } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import EmailVerification from './pages/EmailVerification';
 import MiniWeather from './components/MiniWeather';
+import SimpleTemperature from './components/SimpleTemperature';
 import ThemeToggle from './components/ThemeToggle';
 
 const ScrollToTop = () => {
