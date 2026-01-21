@@ -993,3 +993,24 @@ body.dark-theme .btn-outline-primary:hover {
 .print-only-container {
   display: none;
 }
+/* === Bottom Navigation Styling === */
+
+/* 1. Light Mode (Default) */
+.mobile-bottom-nav {
+    background-color: #ffffff;
+    border-top: 1px solid #dee2e6;
+}
+.nav-item-inactive {
+    color: #6c757d; /* Standard Muted Gray */
+}
+
+/* 2. Dark Mode Overrides */
+[data-bs-theme="dark"] .mobile-bottom-nav {
+    /* ✨ Elegant Dark Blue Background */
+    background-color: #0f172a !important; 
+    border-top: 1px solid #1e293b !important;
+}
+
+[data-bs-theme="dark"] .nav-item-inactive {
+    color: #94a3b8; /* Lighter Blue-Gray for visibility */
+}

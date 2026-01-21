@@ -986,8 +986,7 @@ const PropertyComparisonMobile = () => {
                                 <i className="bi bi-sliders text-primary fs-4"></i>
                             </div>
                             <div>
-                                <h5 className="fw-bold mb-0 text-dark">Inputs</h5>
-                                <small className="text-muted d-none d-sm-block">Generated on {new Date().toLocaleDateString()}</small>
+                                <h5 className="fw-bold mb-0">Inputs</h5>
                             </div>
                         </div>
 
@@ -2053,7 +2052,7 @@ const PropertyComparisonMobile = () => {
                                 <i className="bi bi-speedometer2 text-primary fs-4"></i>
                             </div>
                             <div>
-                                <h5 className="fw-bold mb-0 text-dark">Analysis Report</h5>
+                                <h5 className="fw-bold mb-0">Analysis Report</h5>
                                 <small className="text-muted d-none d-sm-block">Generated on {new Date().toLocaleDateString()}</small>
                             </div>
                         </div>
@@ -2599,11 +2598,14 @@ const PropertyComparisonMobile = () => {
         );
     };
 
-    // 4. BOTTOM NAVIGATION (Active Badge Style)
+    // 4. BOTTOM NAVIGATION (Dark Blue in Dark Mode)
     const renderBottomNav = () => (
         <div 
-            className="fixed-bottom bg-white border-top shadow-lg pb-safe-area" 
-            style={{ zIndex: 1050 }} 
+            className="fixed-bottom shadow-lg pb-safe-area mobile-bottom-nav" 
+            style={{ 
+                zIndex: 1050, 
+                transition: 'background-color 0.3s ease, border-color 0.3s ease'
+            }} 
         >
             <div className="d-flex justify-content-around py-2">
                 
@@ -2612,10 +2614,9 @@ const PropertyComparisonMobile = () => {
                     type="button"
                     className="btn btn-link text-decoration-none p-1"
                     onClick={() => setActiveTab('inputs')}
-                    style={{ minWidth: '70px' }} // Ensure click target size
+                    style={{ minWidth: '70px' }} 
                 >
                     {activeTab === 'inputs' ? (
-                        // ✅ ACTIVE STATE: Badge with Primary BG
                         <div className="d-flex flex-column align-items-center animate-fade-in">
                             <span className="badge rounded-pill bg-primary px-3 py-1 mb-1 shadow-sm">
                                 <i className="bi bi-sliders fs-6 text-white"></i>
@@ -2623,8 +2624,9 @@ const PropertyComparisonMobile = () => {
                             <span className="text-primary fw-bold" style={{ fontSize: '0.7rem' }}>Inputs</span>
                         </div>
                     ) : (
-                        // ⚪ INACTIVE STATE: Muted Icon
-                        <div className="d-flex flex-column align-items-center text-muted opacity-75">
+                        <div 
+                            className="d-flex flex-column align-items-center opacity-75 nav-item-inactive"
+                        >
                             <i className="bi bi-sliders fs-5 mb-1"></i>
                             <span style={{ fontSize: '0.7rem' }}>Inputs</span>
                         </div>
@@ -2646,7 +2648,9 @@ const PropertyComparisonMobile = () => {
                             <span className="text-primary fw-bold" style={{ fontSize: '0.7rem' }}>Overview</span>
                         </div>
                     ) : (
-                        <div className="d-flex flex-column align-items-center text-muted opacity-75">
+                        <div 
+                            className="d-flex flex-column align-items-center opacity-75 nav-item-inactive"
+                        >
                             <i className="bi bi-speedometer2 fs-5 mb-1"></i>
                             <span style={{ fontSize: '0.7rem' }}>Overview</span>
                         </div>
@@ -2668,7 +2672,9 @@ const PropertyComparisonMobile = () => {
                             <span className="text-primary fw-bold" style={{ fontSize: '0.7rem' }}>Details</span>
                         </div>
                     ) : (
-                        <div className="d-flex flex-column align-items-center text-muted opacity-75">
+                        <div 
+                            className="d-flex flex-column align-items-center opacity-75 nav-item-inactive"
+                        >
                             <i className="bi bi-calculator fs-5 mb-1"></i>
                             <span style={{ fontSize: '0.7rem' }}>Details</span>
                         </div>
