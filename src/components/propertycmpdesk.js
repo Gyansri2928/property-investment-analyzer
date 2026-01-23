@@ -756,6 +756,10 @@ const PropertyComparisonDesktop = () => {
             }
 
             const homeLoanAmount = totalCost * (homeLoanShare / 100);
+            const pl1StartMonth = getSafeValue(assumptions.personalLoan1StartMonth);
+            const pl2DelayMonths = getSafeValue(assumptions.personalLoan2StartMonth);
+            // Note: PL2 slider is "Delay after possession", so absolute start is:
+            const pl2AbsoluteStartMonth = possessionMonths + pl2DelayMonths + 1;
             const personalLoan1Amount = totalCost * (personalLoan1Share / 100);
             const personalLoan2Amount = totalCost * (personalLoan2Share / 100);
             const downPaymentAmount = totalCost * (downPaymentShare / 100);
@@ -887,7 +891,9 @@ const PropertyComparisonDesktop = () => {
                             monthlyHLComponent = fullHL_EMI;
                         }
 
-                        const monthlyPL1 = personalLoan1Amount > 0 ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term) : 0;
+                        const monthlyPL1 = (personalLoan1Amount > 0 && m >= pl1StartMonth) // Check Start Month!
+                            ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term)
+                            : 0;
                         runningTotalOutflow += (monthlyHLComponent + monthlyPL1);
                     }
 
@@ -932,6 +938,31 @@ const PropertyComparisonDesktop = () => {
             const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
             const actualIDCPaid = monthlyIDCEMI * prePossessionMonths;
             const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + actualIDCPaid;
+            let phase1TotalCalc = 0;
+            if (paymentPlan === 'clp' && truePrePossessionTotal > 0) {
+                phase1TotalCalc = truePrePossessionTotal;
+            } else {
+                // For Non-CLP or Fallback:
+                // Only count PL1 months where the Start Month has passed
+                const pl1ActiveMonthsPhase1 = Math.max(0, prePossessionMonths - Math.max(0, pl1StartMonth - 1));
+                phase1TotalCalc = (monthlyIDCEMI * prePossessionMonths) + (personalLoan1EMI * pl1ActiveMonthsPhase1);
+            }
+
+            // 2. Calculate Actual Phase 2 Total (Respecting PL1/PL2 Delays)
+            const hlPostTotal = homeLoanEMI * postPossessionMonths;
+
+            // PL1 in Phase 2:
+            // If PL1 starts very late (e.g. Month 40), it might not even be active at the start of Phase 2 (Month 25).
+            const pl1DelayInPhase2 = Math.max(0, pl1StartMonth - (possessionMonths + 1));
+            const pl1PostMonths = Math.max(0, postPossessionMonths - pl1DelayInPhase2);
+            const pl1PostTotal = personalLoan1EMI * pl1PostMonths;
+
+            // PL2 in Phase 2:
+            // PL2 starts only after "Possession + Delay".
+            const pl2PostMonths = Math.max(0, postPossessionMonths - pl2DelayMonths);
+            const pl2PostTotal = personalLoan2EMI * pl2PostMonths;
+
+            const phase2TotalCalc = hlPostTotal + pl1PostTotal + pl2PostTotal;
 
             return {
                 minIDCEMI, maxIDCEMI, idcSchedule, propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
@@ -965,8 +996,8 @@ const PropertyComparisonDesktop = () => {
                 postPossessionMonths,
                 prePossessionEMI,
                 postPossessionEMI,
-                prePossessionTotal: (paymentPlan === 'clp' && truePrePossessionTotal > 0) ? truePrePossessionTotal : (prePossessionEMI * prePossessionMonths),
-                postPossessionTotal: postPossessionEMI * postPossessionMonths,
+                prePossessionTotal: phase1TotalCalc,
+                postPossessionTotal: phase2TotalCalc,
                 prePossessionComponents: {
                     pl1EMI: personalLoan1EMI,
                     monthlyIDCEMI,
@@ -2308,7 +2339,7 @@ const PropertyComparisonDesktop = () => {
                                                         type="range"
                                                         className="form-range"
                                                         min="0"
-                                                        max="36"
+                                                        max="84"
                                                         step="1"
                                                         value={propertyData.assumptions.personalLoan1StartMonth}
                                                         onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
@@ -2430,8 +2461,8 @@ const PropertyComparisonDesktop = () => {
                                             {/* 4. Start Month Slider with Ticks & Labels */}
                                             <div className="col-md-6">
                                                 <label className="form-label d-flex justify-content-between small">
-                                                    <span>Start Month</span>
-                                                    <span className="fw-bold">Month {propertyData.assumptions.personalLoan1StartMonth}</span>
+                                                    <span>Start Month (After Possession)</span>
+                                                    <span className="fw-bold">Month {propertyData.assumptions.personalLoan2StartMonth}</span>
                                                 </label>
                                                 <div className="d-flex justify-content-between">
                                                     <small className="text-muted" style={{ fontSize: '0.65rem' }}>+0 mo</small>
@@ -2447,10 +2478,10 @@ const PropertyComparisonDesktop = () => {
                                                         type="range"
                                                         className="form-range"
                                                         min="0"
-                                                        max="84"
+                                                        max="36"
                                                         step="1"
                                                         value={propertyData.assumptions.personalLoan2StartMonth}
-                                                        onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
+                                                        onChange={(e) => handleAssumptionChange('personalLoan2StartMonth', e.target.value)}
                                                         style={{ position: 'relative', zIndex: 2 }}
                                                     />
 
@@ -2459,14 +2490,14 @@ const PropertyComparisonDesktop = () => {
                                                         className="position-absolute w-100 top-50 start-0 translate-middle-y pe-none"
                                                         style={{ height: '100%', zIndex: 1, paddingLeft: '8px', paddingRight: '8px' }}
                                                     >
-                                                        {[10, 20, 30, 40, 50, 60, 70, 80].map((tickValue) => (
+                                                        {[4, 8, 12, 16, 20, 24, 28, 32].map((tickValue) => (
                                                             <React.Fragment key={tickValue}>
 
                                                                 {/* 1. The Vertical Dash */}
                                                                 <div
                                                                     className="position-absolute bg-secondary opacity-25"
                                                                     style={{
-                                                                        left: `${(tickValue / 84) * 100}%`,
+                                                                        left: `${(tickValue / 36) * 100}%`,
                                                                         width: '2px',
                                                                         height: '10px', // Slightly shorter for cleaner look
                                                                         top: '50%',
@@ -2478,7 +2509,7 @@ const PropertyComparisonDesktop = () => {
                                                                 <div
                                                                     className="position-absolute text-muted opacity-75"
                                                                     style={{
-                                                                        left: `${(tickValue / 84) * 100}%`,
+                                                                        left: `${(tickValue / 36) * 100}%`,
                                                                         top: '20px', // Push below the slider
                                                                         transform: 'translateX(-50%)', // Center text exactly on the tick
                                                                         fontSize: '0.6rem',
@@ -3564,7 +3595,7 @@ const PropertyComparisonDesktop = () => {
 
                                 {/* Timeline 2: Post-Possession - ONLY SHOW IF APPLICABLE */}
                                 {breakdown.postPossessionMonths > 0 ? (
-                                    // CASE A: Normal Scenario (Show Card)
+                                    // CASE A: Normal Scenario
                                     renderTimelineCard(
                                         "Timeline 2: Post-Possession",
                                         "bi-calendar-check",
@@ -3572,23 +3603,64 @@ const PropertyComparisonDesktop = () => {
                                         `${formatCurrency(breakdown.postPossessionEMI)}/month`,
                                         `Month ${breakdown.possessionMonths + 1} to Month ${breakdown.totalHoldingMonths}`,
                                         `${breakdown.postPossessionMonths} months`,
+
+                                        // --- UPDATED COMPONENTS SECTION ---
                                         <>
                                             {renderComponentBox("HL EMI", formatCurrency(breakdown.homeLoanEMI), 4)}
                                             {renderComponentBox("PL1 EMI", formatCurrency(breakdown.personalLoan1EMI), 4)}
                                             {breakdown.hasPersonalLoan2 &&
                                                 renderComponentBox("PL2 EMI", formatCurrency(breakdown.personalLoan2EMI), 4)
                                             }
+
+                                            {/* Card 1: Total Home Loan Cost */}
+                                            <div className="col-4">
+                                                <div className="p-2 border rounded  bg-opacity-10 border-opacity-25 h-100">
+                                                    <small className="text-opacity-75 d-block" style={{ fontSize: '0.65rem' }}></small>
+                                                    <div style={{ fontSize: '0.85rem' }}>
+                                                        {breakdown.postPossessionMonths} months × {formatCurrency(breakdown.homeLoanEMI)}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Card 2: Total PL1 Cost */}
+                                            <div className="col-4">
+                                                <div className="p-2 border rounded bg-opacity-10 border-opacity-25 h-100">
+                                                    <small className="text-opacity-75 d-block" style={{ fontSize: '0.65rem' }}></small>
+                                                    <div style={{ fontSize: '0.85rem' }}>
+                                                        {breakdown.postPossessionMonths} months × {formatCurrency(breakdown.personalLoan1EMI)}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Card 3: Total PL2 Cost (Conditional) */}
+                                            {breakdown.hasPersonalLoan2 && (
+                                                <div className="col-4">
+                                                    <div className="p-2 border rounded bg-opacity-10 border-opacity-25 h-100">
+                                                        <small className="text-opacity-75 d-block" style={{ fontSize: '0.65rem' }}></small>
+                                                        <div style={{ fontSize: '0.85rem' }}>
+                                                            {Math.max(0, breakdown.postPossessionMonths - (breakdown.pl2SelectedMonths || 0))}
+
+                                                            {' '}months × {formatCurrency(breakdown.personalLoan2EMI)}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </>,
+
+                                        // Total Amount Footer
                                         formatCurrency(breakdown.postPossessionTotal),
-                                        `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`,
+                                        "Includes Home Loan + Active Personal Loans",
+
                                         null,
                                         null,
+
+                                        // Extra Footer Note
                                         <small className="opacity-75 mt-2 d-block">
                                             <i className="bi bi-piggy-bank me-1"></i> Covers Principal Repayment + Interest
                                         </small>
                                     )
                                 ) : (
-                                    // CASE B: Early Exit (Show "Not Applicable" Message)
+                                    // CASE B: Early Exit
                                     <div className="col-md-6">
                                         <div className="card h-100 border-secondary border-opacity-25 bg-light">
                                             <div className="card-header bg-secondary bg-opacity-10 text-muted">
@@ -3599,8 +3671,6 @@ const PropertyComparisonDesktop = () => {
                                                 <h5 className="fw-bold text-muted">Not Applicable</h5>
                                                 <p className="mb-0 small">
                                                     Your holding period ({breakdown.years} years) ends before or exactly at possession.
-                                                    <br />
-                                                    You will exit this investment before starting post-possession EMIs.
                                                 </p>
                                             </div>
                                         </div>

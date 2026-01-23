@@ -2028,10 +2028,10 @@ const PropertyComparisonMobile = () => {
                                 {userSelections.scenarioExitPrices.map((price, index) => (
                                     <div
                                         key={index}
-                                        className="d-flex align-items-center bg-white border rounded-pill ps-3 pe-1 py-1 shadow-sm"
+                                        className="d-flex align-items-center border rounded-pill ps-3 pe-1 py-1 shadow-sm"
                                         style={{ fontSize: '0.85rem' }}
                                     >
-                                        <span className="fw-bold text-dark me-2">₹{price}</span>
+                                        <span className="fw-bold me-2">₹{price}</span>
 
                                         {/* The Delete Button (X) */}
                                         <button
@@ -2793,59 +2793,39 @@ const PropertyComparisonMobile = () => {
             { id: 'breakdown', label: 'Details', icon: 'bi-calculator-fill' },
         ];
 
+
         return (
-            <div
-                className="fixed-bottom bg-white shadow-lg"
-                style={{
-                    borderRadius: '20px 20px 0 0', // Soft rounded top corners
-                    paddingBottom: 'env(safe-area-inset-bottom)', // Handle iPhone X+ safe area
-                    zIndex: 1050
-                }}
-            >
-                <div className="d-flex justify-content-around align-items-center py-3 px-2">
-                    {navItems.map((item) => {
-                        const isActive = activeTab === item.id;
+            <div className="mobile-bottom-nav">
+                    <div className="d-flex justify-content-around align-items-center py-3 px-2">
+                        {navItems.map((item) => {
+                            const isActive = activeTab === item.id;
 
-                        return (
-                            <div
-                                key={item.id}
-                                onClick={() => setActiveTab(item.id)}
-                                role="button"
-                                className={`d-flex align-items-center justify-content-center`}
-                                style={{
-                                    // Active State: Primary Color Bg, White Text
-                                    // Inactive State: Transparent Bg, Muted Text
-                                    backgroundColor: isActive ? 'var(--bs-primary)' : 'transparent',
-                                    color: isActive ? '#fff' : '#6c757d',
-
-                                    // Shape & Size
-                                    borderRadius: '50px',
-                                    padding: isActive ? '10px 20px' : '10px',
-
-                                    // The Smooth Animation
-                                    transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
-                                    cursor: 'pointer'
-                                }}
-                            >
-                                {/* Icon */}
-                                <i className={`bi ${item.icon} fs-5`}></i>
-
-                                {/* Label (Visible only when active) */}
+                            return (
                                 <div
-                                    style={{
-                                        maxWidth: isActive ? '100px' : '0', // Animate width
-                                        opacity: isActive ? 1 : 0,           // Animate opacity
-                                        overflow: 'hidden',
-                                        whiteSpace: 'nowrap',
-                                        transition: 'all 0.3s ease-out',
-                                        marginLeft: isActive ? '8px' : '0'
-                                    }}
+                                    key={item.id}
+                                    onClick={() => setActiveTab(item.id)}
+                                    role="button"
+                                    className={`nav-pill-item ${isActive ? 'active' : ''}`}
                                 >
-                                    <span className="fw-bold small">{item.label}</span>
+                                    {/* Icon */}
+                                    <i className={`bi ${item.icon} fs-5`}></i>
+
+                                    {/* Label (Visible only when active) */}
+                                    <div
+                                        style={{
+                                            maxWidth: isActive ? '100px' : '0', // Animate width
+                                            opacity: isActive ? 1 : 0,           // Animate opacity
+                                            overflow: 'hidden',
+                                            whiteSpace: 'nowrap',
+                                            transition: 'all 0.3s ease-out',
+                                            marginLeft: isActive ? '8px' : '0'
+                                        }}
+                                    >
+                                        <span className="fw-bold small">{item.label}</span>
+                                    </div>
                                 </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })}
                 </div>
             </div>
         );

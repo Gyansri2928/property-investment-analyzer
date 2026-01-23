@@ -1014,3 +1014,110 @@ body.dark-theme .btn-outline-primary:hover {
 [data-bs-theme="dark"] .nav-item-inactive {
     color: #94a3b8; /* Lighter Blue-Gray for visibility */
 }
+/* =========================================
+   16. BOTTOM NAVIGATION (THEME ENGINE)
+   ========================================= */
+
+/* ☀️ LIGHT MODE VARIABLES */
+:root {
+    --nav-bar-bg: #ffffff;
+    --nav-bar-border: rgba(0, 0, 0, 0.05);
+    --nav-bar-shadow: 0 -5px 20px rgba(0, 0, 0, 0.05);
+    
+    /* Pill Colors */
+    --nav-pill-active-bg: #24466ec5; /* Uses your Steel Blue */
+    --nav-pill-active-text: #ffffff;
+    --nav-pill-inactive-bg: transparent;
+    --nav-pill-inactive-text: #6c757d;
+}
+
+/* 🌙 DARK MODE VARIABLES */
+[data-theme='dark'] {
+    --nav-bar-bg: #0F0F0F; /* Deep Matte Black (No transparency) */
+    --nav-bar-border: rgba(255, 255, 255, 0.1);
+    --nav-bar-shadow: 0 -10px 30px rgba(0, 0, 0, 0.9);
+    
+    /* Neon Pill Colors */
+    --nav-pill-active-bg: #24476e; /* Neon Green */
+    --nav-pill-active-text: #d6d3d3;
+    --nav-pill-inactive-bg: #1f1f1f; /* Solid Dark Gray */
+    --nav-pill-inactive-text: #888888;
+}
+
+/* --- The Container --- */
+.mobile-bottom-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    z-index: 1050;
+    
+    /* Using the variables defined above */
+    background-color: var(--nav-bar-bg) !important; 
+    border-top: 1px solid var(--nav-bar-border);
+    box-shadow: var(--nav-bar-shadow);
+    
+    /* Shape & Safe Area */
+    border-radius: 20px 20px 0 0;
+    padding-top: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+    
+    /* Disable glass effect to ensure solid background in dark mode */
+    backdrop-filter: none !important; 
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* --- The Individual Pill (Button) --- */
+.nav-pill-item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 50px;
+    height: 40px;
+    min-width: 48px; /* Icon width */
+    padding: 0 12px;
+    
+    /* Default (Inactive) State */
+    background-color: var(--nav-pill-inactive-bg);
+    color: var(--nav-pill-inactive-text);
+    border: 1px solid transparent; /* Prevents layout shift when border adds in active */
+    
+    transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Inactive Icon Size */
+.nav-pill-item i {
+    font-size: 1.2rem;
+}
+
+/* --- Active State --- */
+.nav-pill-item.active {
+    background-color: var(--nav-pill-active-bg);
+    color: var(--nav-pill-active-text);
+    padding: 0 24px; /* Expand width */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.15); /* Subtle lift */
+}
+
+/* Specific fix for Dark Mode Border on inactive items */
+[data-theme='dark'] .nav-pill-item:not(.active) {
+    border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* The Expanding Text Label */
+.nav-label {
+    max-width: 0;
+    opacity: 0;
+    margin-left: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-weight: 700;
+    font-size: 0.75rem;
+    transition: all 0.3s ease-out;
+}
+
+.nav-pill-item.active .nav-label {
+    max-width: 100px;
+    opacity: 1;
+    margin-left: 10px;
+}
