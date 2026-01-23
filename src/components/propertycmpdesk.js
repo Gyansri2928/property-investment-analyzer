@@ -27,8 +27,8 @@ const INITIAL_PROPERTY_DATA = {
     assumptions: {
         homeLoanRate: '', homeLoanTerm: '', homeLoanShare: 80, homeLoanStartMonth: 0, // This now acts as "Delay" in Default mode, or "Month" in Manual mode
         homeLoanStartMode: 'default',
-        personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
-        personalLoan2Rate: '', personalLoan2Term: 7, personalLoan2StartMonth: '', personalLoan2Share: 10,
+        personalLoan1Rate: '', personalLoan1Term: '', personalLoan1StartMonth: 0, personalLoan1Share: 10,
+        personalLoan2Rate: '', personalLoan2Term: '', personalLoan2StartMonth: 0, personalLoan2Share: 10,
         downPaymentShare: 0,
         investmentPeriod: '', clpDurationYears: '', bankDisbursementStartMonth: '', bankDisbursementInterval: '', lastBankDisbursementMonth: ''
     }
@@ -48,9 +48,20 @@ const INITIAL_USER_SELECTIONS = {
 // ===================== 1. PURE UTILITIES (Moved Outside for Speed) =====================
 
 // Formatting Helpers
+const formatLakhs = (value) => {
+    if (!value && value !== 0) return '₹0 L';
 
-const formatLakhs = (value) => (!value && value !== 0) ? '₹0L' : `₹${(value / 100000).toFixed(2)}L`;
-const formatCurrency = (value) => (!value && value !== 0) ? '₹0' : `₹${Math.round(value).toLocaleString()}`;
+    const valAbs = Math.abs(value);
+
+    // If it's 1 Crore (100 Lakhs) or more, show Cr
+    if (valAbs >= 10000000) {
+        return `₹${(value / 10000000).toFixed(2)} Cr`;
+    }
+
+    // Otherwise show Lakhs
+    return `₹${(value / 100000).toFixed(2)} L`;
+};
+const formatCurrency = (value) => (!value && value !== 0) ? '₹0' : `₹${Math.round(value).toLocaleString('en-IN')}`;
 const formatPercent = (value) => (!value && value !== 0) ? '0%' : `${value.toFixed(1)}%`;
 
 // Math Helpers (Standard Formulas)
@@ -134,33 +145,49 @@ const renderTimelineCard = (title, icon, color, mainEMI, period, duration, compo
                 <h6 className="mb-0"><i className={`bi ${icon} me-2`}></i>{title}</h6>
                 {extraHeader}
             </div>
-            <div className="card-body">
-                <div className="text-center mb-3 ps-2 pe-2">
-                    {/* 1. We removed "/month" - now it just prints what you pass */}
-                    <h3 className={`text-${color} fw-bold`}>{mainEMI}</h3>
 
-                    {/* 2. We removed the hardcoded logic - now it prints the subtitle argument */}
-                    <small className="text-muted">{footerSubtitle}</small>
-                </div>
-                <div className="row g-2">
-                    <div className="col-6">
-                        <div className="p-2 bg-light rounded"><small className="text-muted">Period</small><div className="fw-bold">{period}</div></div>
+            {/* ✅ CHANGE 1: Make body a flex column */}
+            <div className="card-body d-flex flex-column">
+
+                {/* ✅ CHANGE 2: Wrapper for Top Content (Grows to fill space) */}
+                <div className="flex-grow-1">
+                    <div className="text-center mb-3 ps-2 pe-2">
+                        <h3 className={`text-${color} fw-bold`}>{mainEMI}</h3>
+                        <small className="text-muted">{footerSubtitle}</small>
                     </div>
-                    <div className="col-6">
-                        <div className="p-2 bg-light rounded"><small className="text-muted">Duration</small><div className="fw-bold">{duration}</div></div>
-                    </div>
-                    <div className="col-12">
-                        <div className="p-2 bg-light rounded"><small className="text-muted">EMI Components</small><div className="row g-1">{componentsJSX}</div></div>
-                    </div>
-                    <div className="col-12">
-                        <div className={`p-3 bg-${color} text-white rounded text-center mt-2`}>
-                            <small className="text-white">Total {title.split(':')[0]} EMI</small>
-                            <div className="fw-bold fs-4">{totalAmount}</div>
-                            <small className="text-white">{calcText}</small>
-                            {extraFooter}
+
+                    <div className="row g-2">
+                        <div className="col-6">
+                            <div className="p-2 bg-light rounded h-100"> {/* Added h-100 for alignment */}
+                                <small className="text-muted">Period</small>
+                                <div className="fw-bold">{period}</div>
+                            </div>
+                        </div>
+                        <div className="col-6">
+                            <div className="p-2 bg-light rounded h-100"> {/* Added h-100 for alignment */}
+                                <small className="text-muted">Duration</small>
+                                <div className="fw-bold">{duration}</div>
+                            </div>
+                        </div>
+                        <div className="col-12">
+                            <div className="p-2 bg-light rounded">
+                                <small className="text-muted">EMI Components</small>
+                                <div className="row g-1">{componentsJSX}</div>
+                            </div>
                         </div>
                     </div>
                 </div>
+
+                {/* ✅ CHANGE 3: Footer Pushed to Bottom */}
+                <div className="mt-3">
+                    <div className={`p-3 bg-${color} text-white rounded text-center`}>
+                        <small className="text-white">Total {title.split(':')[0]} EMI</small>
+                        <div className="fw-bold fs-4">{totalAmount}</div>
+                        <small className="text-white">{calcText}</small>
+                        {extraFooter}
+                    </div>
+                </div>
+
             </div>
         </div>
     </div>
@@ -190,9 +217,8 @@ const renderProfitChart = (profits) => {
                                 transition: 'height 0.5s ease'
                             }}
                         >
-                            {/* Tooltip value on hover (or simple text inside) */}
                             <div className="text-white small py-1 d-none d-md-block" style={{ fontSize: '0.7rem' }}>
-                                {((Math.abs(item.netProfit) / maxProfit) * 100).toFixed(0)}%
+                                {formatPercent(item.roi)}
                             </div>
                         </div>
 
@@ -455,20 +481,12 @@ const PropertyComparisonDesktop = () => {
         propertyData.purchasePrice,
         propertyData.assumptions.investmentPeriod,
         propertyData.assumptions.holdingPeriodUnit,
-        userSelections.selectedExitPrice
     ]);
     // 1. Auto-scroll to top when switching Tabs (Inputs vs Overview vs Breakdown)
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }, [activeTab]);
 
-    // 2. Auto-scroll to top when changing Wizard Steps (Step 1 -> Step 2)
-    useEffect(() => {
-        // Only scroll if we are not at the very top already
-        if (window.scrollY > 100) {
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-        }
-    }, [currentStep]);
     // --- EXPORT FUNCTIONALITY ---
 
     const handlePrintReport = () => {
@@ -591,10 +609,6 @@ const PropertyComparisonDesktop = () => {
                     personalLoan1Share: prev.assumptions.personalLoan1Share,
                     personalLoan2Share: prev.assumptions.personalLoan2Share,
                     downPaymentShare: prev.assumptions.downPaymentShare,
-
-                    // Keep specific CLP settings:
-                    clpDurationYears: prev.assumptions.clpDurationYears,
-                    bankDisbursementInterval: prev.assumptions.bankDisbursementInterval,
 
                     // Reset possession as it varies per property
                     possessionMonths: ''
@@ -1276,8 +1290,6 @@ const PropertyComparisonDesktop = () => {
                 newAssumptions.personalLoan2Share = 10;
                 newAssumptions.downPaymentShare = 0;
                 newAssumptions.homeLoanShare = 80;
-                newAssumptions.personalLoan1Term = 7; // Force 7 Years
-                newAssumptions.personalLoan2Term = 7;
 
                 // ✅ FIX: Set default possession on the PROPERTY, not assumptions
                 if (selectedIndex !== -1) {
@@ -1425,6 +1437,22 @@ const PropertyComparisonDesktop = () => {
                 if (getSafeValue(propertyData.assumptions.personalLoan1Share) > 0 && isEmpty(propertyData.assumptions.personalLoan1Rate)) {
                     isValid = false;
                     errorMsg = 'Please enter Personal Loan 1 Rate.';
+                }
+                // Check PL1 Term
+                if (getSafeValue(propertyData.assumptions.personalLoan1Share) > 0) {
+                    if (isEmpty(propertyData.assumptions.personalLoan1Rate)) {
+                        isValid = false; errorMsg = 'Please enter Personal Loan 1 Rate.';
+                    } else if (isEmpty(propertyData.assumptions.personalLoan1Term)) {
+                        isValid = false; errorMsg = 'Please enter Personal Loan 1 Tenure.';
+                    }
+                }
+                // Check PL2 Term
+                if (getSafeValue(propertyData.assumptions.personalLoan2Share) > 0) {
+                    if (isEmpty(propertyData.assumptions.personalLoan2Rate)) {
+                        isValid = false; errorMsg = 'Please enter Personal Loan 2 Rate.';
+                    } else if (isEmpty(propertyData.assumptions.personalLoan2Term)) {
+                        isValid = false; errorMsg = 'Please enter Personal Loan 2 Tenure.';
+                    }
                 }
 
                 // Check PL2 Rate if Share > 0
@@ -2204,7 +2232,7 @@ const PropertyComparisonDesktop = () => {
                                     'Personal Loan 1 Details',
                                     'bi-cash-coin',
                                     (
-                                        <div className="row g-3">
+                                        <div className="row g-4">
                                             {/* Column 1: Share % */}
                                             <div className="col-md-3">
                                                 <label className="form-label">Share of Total Cost (%)</label>
@@ -2231,6 +2259,20 @@ const PropertyComparisonDesktop = () => {
                                                 </div>
                                             </div>
 
+                                            <div className="col-md-3">
+                                                <label className="form-label">
+                                                    Tenure (Years) <span className="text-danger fw-bold">*</span>
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={propertyData.assumptions.personalLoan1Term}
+                                                    placeholder="e.g. 5"
+                                                    onChange={(e) => handleAssumptionChange('personalLoan1Term', e.target.value)}
+                                                    disabled={propertyData.paymentPlan !== 'custom' && propertyData.assumptions.personalLoan1Share === 0}
+                                                />
+                                            </div>
+
                                             {/* Column 3: Interest Rate */}
                                             <div className="col-md-3">
                                                 <label className="form-label">
@@ -2249,23 +2291,67 @@ const PropertyComparisonDesktop = () => {
                                                 </div>
                                             </div>
 
-                                            {/* Column 4: Start Month Slider */}
-                                            <div className="col-md-3">
+                                            {/* Column 5: Start Month Slider */}
+                                            <div className="col-md-6">
                                                 <label className="form-label d-flex justify-content-between">
                                                     <span>Start Month</span>
                                                     <span className="fw-bold">Month {propertyData.assumptions.personalLoan1StartMonth}</span>
                                                 </label>
-                                                <input
-                                                    type="range"
-                                                    className="form-range"
-                                                    min="0"
-                                                    max="84"
-                                                    value={propertyData.assumptions.personalLoan1StartMonth}
-                                                    onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
-                                                />
                                                 <div className="d-flex justify-content-between">
                                                     <small className="text-muted" style={{ fontSize: '0.7rem' }}>Month 0</small>
                                                     <small className="text-muted" style={{ fontSize: '0.7rem' }}>Month 84</small>
+                                                </div>
+                                                <div className="position-relative mb-4">
+
+                                                    {/* The Actual Input Slider */}
+                                                    <input
+                                                        type="range"
+                                                        className="form-range"
+                                                        min="0"
+                                                        max="36"
+                                                        step="1"
+                                                        value={propertyData.assumptions.personalLoan1StartMonth}
+                                                        onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
+                                                        style={{ position: 'relative', zIndex: 2 }}
+                                                    />
+
+                                                    {/* The Ticks & Labels Overlay */}
+                                                    <div
+                                                        className="position-absolute w-100 top-50 start-0 translate-middle-y pe-none"
+                                                        style={{ height: '100%', zIndex: 1, paddingLeft: '8px', paddingRight: '8px' }}
+                                                    >
+                                                        {[10, 20, 30, 40, 50, 60, 70, 80].map((tickValue) => (
+                                                            <React.Fragment key={tickValue}>
+
+                                                                {/* 1. The Vertical Dash */}
+                                                                <div
+                                                                    className="position-absolute bg-secondary opacity-25"
+                                                                    style={{
+                                                                        left: `${(tickValue / 84) * 100}%`,
+                                                                        width: '2px',
+                                                                        height: '10px', // Slightly shorter for cleaner look
+                                                                        top: '50%',
+                                                                        transform: 'translate(-50%, -50%)'
+                                                                    }}
+                                                                ></div>
+
+                                                                {/* 2. The Number Label */}
+                                                                <div
+                                                                    className="position-absolute text-muted opacity-75"
+                                                                    style={{
+                                                                        left: `${(tickValue / 84) * 100}%`,
+                                                                        top: '20px', // Push below the slider
+                                                                        transform: 'translateX(-50%)', // Center text exactly on the tick
+                                                                        fontSize: '0.6rem',
+                                                                        fontWeight: '600'
+                                                                    }}
+                                                                >
+                                                                    {tickValue}
+                                                                </div>
+
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                                 <small className="text-muted d-block text-end mt-1" style={{ fontSize: '0.65rem' }}>Independent of possession</small>
                                             </div>
@@ -2305,7 +2391,20 @@ const PropertyComparisonDesktop = () => {
                                                     )}
                                                 </div>
                                             </div>
-
+                                            {/* Column 2: Tenure (WAS Amount) */}
+                                            <div className="col-md-3">
+                                                <label className="form-label">
+                                                    Tenure (Years) <span className="text-danger fw-bold">*</span>
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    className="form-control"
+                                                    value={propertyData.assumptions.personalLoan2Term}
+                                                    placeholder="e.g. 5"
+                                                    onChange={(e) => handleAssumptionChange('personalLoan2Term', e.target.value)}
+                                                    disabled={propertyData.assumptions.personalLoan2Share === 0}
+                                                />
+                                            </div>
                                             {/* Column 3: Interest Rate */}
                                             <div className="col-md-3">
                                                 <label className="form-label">
@@ -2328,24 +2427,70 @@ const PropertyComparisonDesktop = () => {
                                                 )}
                                             </div>
 
-                                            {/* Column 4: Start Month Slider */}
-                                            <div className="col-md-3">
-                                                <label className="form-label d-flex justify-content-between">
-                                                    <span>Start After <br></br>Possession</span>
-                                                    <span className="fw-bold text-muted">Delay: {propertyData.assumptions.personalLoan2StartMonth} mo</span>
+                                            {/* 4. Start Month Slider with Ticks & Labels */}
+                                            <div className="col-md-6">
+                                                <label className="form-label d-flex justify-content-between small">
+                                                    <span>Start Month</span>
+                                                    <span className="fw-bold">Month {propertyData.assumptions.personalLoan1StartMonth}</span>
                                                 </label>
-                                                <input
-                                                    type="range"
-                                                    className="form-range"
-                                                    min="0"
-                                                    max="36"
-                                                    value={propertyData.assumptions.personalLoan2StartMonth}
-                                                    onChange={(e) => handleAssumptionChange('personalLoan2StartMonth', e.target.value)}
-                                                    disabled={propertyData.assumptions.personalLoan2Share === 0}
-                                                />
                                                 <div className="d-flex justify-content-between">
-                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>+0 mo</small>
-                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>+36 mo</small>
+                                                    <small className="text-muted" style={{ fontSize: '0.65rem' }}>+0 mo</small>
+                                                    <small className="text-muted" style={{ fontSize: '0.65rem' }}>+36 mo</small>
+                                                </div>
+
+                                                {/* Slider Wrapper */}
+                                                {/* ✅ Increased margin-bottom (mb-4) to make room for labels */}
+                                                <div className="position-relative mb-4">
+
+                                                    {/* The Actual Input Slider */}
+                                                    <input
+                                                        type="range"
+                                                        className="form-range"
+                                                        min="0"
+                                                        max="84"
+                                                        step="1"
+                                                        value={propertyData.assumptions.personalLoan2StartMonth}
+                                                        onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
+                                                        style={{ position: 'relative', zIndex: 2 }}
+                                                    />
+
+                                                    {/* The Ticks & Labels Overlay */}
+                                                    <div
+                                                        className="position-absolute w-100 top-50 start-0 translate-middle-y pe-none"
+                                                        style={{ height: '100%', zIndex: 1, paddingLeft: '8px', paddingRight: '8px' }}
+                                                    >
+                                                        {[10, 20, 30, 40, 50, 60, 70, 80].map((tickValue) => (
+                                                            <React.Fragment key={tickValue}>
+
+                                                                {/* 1. The Vertical Dash */}
+                                                                <div
+                                                                    className="position-absolute bg-secondary opacity-25"
+                                                                    style={{
+                                                                        left: `${(tickValue / 84) * 100}%`,
+                                                                        width: '2px',
+                                                                        height: '10px', // Slightly shorter for cleaner look
+                                                                        top: '50%',
+                                                                        transform: 'translate(-50%, -50%)'
+                                                                    }}
+                                                                ></div>
+
+                                                                {/* 2. The Number Label */}
+                                                                <div
+                                                                    className="position-absolute text-muted opacity-75"
+                                                                    style={{
+                                                                        left: `${(tickValue / 84) * 100}%`,
+                                                                        top: '20px', // Push below the slider
+                                                                        transform: 'translateX(-50%)', // Center text exactly on the tick
+                                                                        fontSize: '0.6rem',
+                                                                        fontWeight: '600'
+                                                                    }}
+                                                                >
+                                                                    {tickValue}
+                                                                </div>
+
+                                                            </React.Fragment>
+                                                        ))}
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
@@ -2797,10 +2942,10 @@ const PropertyComparisonDesktop = () => {
                             balanceLabel={`Reduced by ${formatLakhs(profit)}`}
                             isRecommended={true}
                             features={[
+                                { icon: "bi-exclamation-triangle-fill text-danger", text: "High initial monthly commitment" },
                                 { icon: "bi-check-circle-fill text-success", text: "Massive Principal Reduction" },
                                 { icon: "bi-check-circle-fill text-success", text: "Lower Loan Balance = Higher Profit" },
                                 { icon: "bi-check-circle-fill text-success", text: "Paid off significant debt early" },
-                                { icon: "bi-exclamation-triangle-fill text-warning", text: "High initial monthly commitment" },
                             ]}
                         />
                     </div>
@@ -3435,7 +3580,12 @@ const PropertyComparisonDesktop = () => {
                                             }
                                         </>,
                                         formatCurrency(breakdown.postPossessionTotal),
-                                        `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`
+                                        `(${breakdown.postPossessionMonths} months * ${formatCurrency(breakdown.postPossessionEMI)})`,
+                                        null,
+                                        null,
+                                        <small className="opacity-75 mt-2 d-block">
+                                            <i className="bi bi-piggy-bank me-1"></i> Covers Principal Repayment + Interest
+                                        </small>
                                     )
                                 ) : (
                                     // CASE B: Early Exit (Show "Not Applicable" Message)
@@ -3489,9 +3639,9 @@ const PropertyComparisonDesktop = () => {
                                     Interest During Construction (IDC)
                                 </h5>
                                 <div className="row g-3">
-                                    {renderStatCard("Monthly IDC EMI", formatCurrency(breakdown.monthlyIDCEMI), "Interest during construction", "warning", 4)}
+                                    {renderStatCard("Average IDC EMI", formatCurrency(breakdown.monthlyIDCEMI), "Interest during construction", "success", 4)}
                                     {renderStatCard("Total IDC Amount", formatCurrency(breakdown.totalIDC), `Accumulated over ${breakdown.constructionMonths} months`, "danger", 4)}
-                                    {renderStatCard("Home Loan with IDC", formatCurrency(breakdown.totalHomeLoanAtCompletion), "Principal + Total IDC", "info", 4)}
+                                    {renderStatCard("Home Loan with IDC", formatCurrency(breakdown.totalHomeLoanAtCompletion + breakdown.totalIDC), "Principal + Total IDC", "info", 4)}
                                 </div>
                             </div>
                         )}
@@ -3902,7 +4052,7 @@ const PropertyComparisonDesktop = () => {
         if (!bd) return null;
 
         const prop = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId) || {};
-        
+
         // --- HELPER: Re-calculate Strategy Comparison for Print ---
         // (We calculate this locally here since it wasn't stored in global state)
         let strategyData = null;
@@ -3912,40 +4062,40 @@ const PropertyComparisonDesktop = () => {
             const tenure = propertyData.assumptions.homeLoanTerm;
             const possession = bd.possessionMonths;
             const fullEMI = calculateEMI(hlAmount, rate, tenure);
-            
+
             // Sim A: Standard
-            let stdTotal = 0; 
+            let stdTotal = 0;
             let cumDisb = 0;
             const slabs = bd.idcSchedule?.length || 1;
             const slabAmt = hlAmount / slabs;
             const interval = propertyData.assumptions.bankDisbursementInterval || 3;
-            
-            for(let m=1; m<=possession; m++){
-                if(m % interval === 0 && cumDisb < hlAmount) {
+
+            for (let m = 1; m <= possession; m++) {
+                if (m % interval === 0 && cumDisb < hlAmount) {
                     cumDisb += slabAmt;
-                    if(cumDisb > hlAmount) cumDisb = hlAmount;
+                    if (cumDisb > hlAmount) cumDisb = hlAmount;
                 }
-                stdTotal += (cumDisb * (rate/100))/12;
+                stdTotal += (cumDisb * (rate / 100)) / 12;
             }
 
             // Sim B: Smart Saver
             let manTotal = 0;
-            let manBal = 0; 
+            let manBal = 0;
             let manPrin = 0;
             cumDisb = 0;
-            for(let m=1; m<=possession; m++){
-                if(m % interval === 0 && cumDisb < hlAmount) {
+            for (let m = 1; m <= possession; m++) {
+                if (m % interval === 0 && cumDisb < hlAmount) {
                     cumDisb += slabAmt;
                     manBal += slabAmt;
-                    if(cumDisb > hlAmount) cumDisb = hlAmount;
+                    if (cumDisb > hlAmount) cumDisb = hlAmount;
                 }
-                const interest = (manBal * (rate/100))/12;
+                const interest = (manBal * (rate / 100)) / 12;
                 const prin = fullEMI - interest;
                 manBal -= prin;
                 manPrin += prin;
                 manTotal += fullEMI;
             }
-            
+
             strategyData = {
                 stdTotal,
                 stdBal: hlAmount,
@@ -3967,7 +4117,7 @@ const PropertyComparisonDesktop = () => {
                 {/* 2. EXECUTIVE SUMMARY GRID */}
                 <div className="row mb-5">
                     <div className="col-12 mb-3"><h5 className="fw-bold border-bottom pb-2">1. Executive Summary</h5></div>
-                    
+
                     {/* Property Card */}
                     <div className="col-6 mb-3">
                         <div className="p-3 border rounded h-100">
@@ -3998,7 +4148,7 @@ const PropertyComparisonDesktop = () => {
                 {/* 3. TIMELINE & BREAKDOWN */}
                 <div className="mb-5">
                     <h5 className="fw-bold border-bottom pb-2 mb-4">2. Timeline & Cash Flow Breakdown</h5>
-                    
+
                     {/* Timeline 1: Pre-Possession */}
                     <div className="mb-4">
                         <div className="d-flex justify-content-between align-items-center mb-2 bg-light p-2 rounded border">
@@ -4083,7 +4233,7 @@ const PropertyComparisonDesktop = () => {
                 </div>
                 <div className="mb-5 break-inside-avoid">
                     <h5 className="fw-bold border-bottom pb-2 mb-3">3. Comprehensive Financial Metrics</h5>
-                    
+
                     {/* Row 1: Loan & Payment Summary */}
                     <div className="row g-3 mb-3">
                         <div className="col-4">
@@ -4115,7 +4265,7 @@ const PropertyComparisonDesktop = () => {
                             <div className="p-3 border rounded bg-warning bg-opacity-10 h-100 text-center">
                                 <div className="d-flex justify-content-center align-items-center gap-2 mb-1">
                                     <span className="small fw-bold">Total Interest</span>
-                                    {bd.hasIDC && <span className="badge bg-warning text-dark border" style={{fontSize: '0.6rem'}}>Inc. IDC</span>}
+                                    {bd.hasIDC && <span className="badge bg-warning text-dark border" style={{ fontSize: '0.6rem' }}>Inc. IDC</span>}
                                 </div>
                                 <div className="fw-bold fs-4 text-dark">{formatLakhs(bd.totalInterestPaid)}</div>
                                 <div className="small text-muted">Cost of Borrowing</div>
@@ -4171,7 +4321,7 @@ const PropertyComparisonDesktop = () => {
                                 <div className="card bg-warning bg-opacity-10 border-warning">
                                     <div className="card-body">
                                         <h6 className="fw-bold text-dark">IDC Summary</h6>
-                                        <hr/>
+                                        <hr />
                                         <div className="d-flex justify-content-between mb-2">
                                             <span>Min EMI:</span><strong>{formatCurrency(bd.minIDCEMI)}</strong>
                                         </div>
@@ -4253,8 +4403,8 @@ const PropertyComparisonDesktop = () => {
                 {/* FOOTER */}
                 <div className="mt-auto border-top pt-3 text-center text-muted small">
                     <p>
-                        <strong>Disclaimer:</strong> This report is for estimation purposes only. 
-                        Actual values may vary based on bank rates, taxes, and market conditions. 
+                        <strong>Disclaimer:</strong> This report is for estimation purposes only.
+                        Actual values may vary based on bank rates, taxes, and market conditions.
                         Generated by <strong>Agenthum AI Solutions</strong>.
                     </p>
                 </div>

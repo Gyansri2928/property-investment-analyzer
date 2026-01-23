@@ -23,12 +23,28 @@ const INITIAL_PROPERTY_DATA = {
     ],
     paymentPlan: 'clp',
     assumptions: {
-        homeLoanRate: '', homeLoanTerm: '', homeLoanShare: 80, homeLoanStartMonth: 0,
+        homeLoanRate: '',
+        homeLoanTerm: '',
+        homeLoanShare: 80,
+        homeLoanStartMonth: 0,
         homeLoanStartMode: 'default',
-        personalLoan1Rate: '', personalLoan1Term: 7, personalLoan1StartMonth: 0, personalLoan1Share: 10,
-        personalLoan2Rate: '', personalLoan2Term: 7, personalLoan2StartMonth: '', personalLoan2Share: 10,
+
+        personalLoan1Rate: '',
+        personalLoan1Term: '', // ✅ CHANGED from 7 to ''
+        personalLoan1StartMonth: 0,
+        personalLoan1Share: 10,
+
+        personalLoan2Rate: '',
+        personalLoan2Term: '', // ✅ CHANGED from 7 to ''
+        personalLoan2StartMonth: '',
+        personalLoan2Share: 10,
+
         downPaymentShare: 0,
-        investmentPeriod: '', clpDurationYears: '', bankDisbursementStartMonth: '', bankDisbursementInterval: '', lastBankDisbursementMonth: '',
+        investmentPeriod: '',
+        clpDurationYears: '',
+        bankDisbursementStartMonth: '',
+        bankDisbursementInterval: '',
+        lastBankDisbursementMonth: '',
         holdingPeriodUnit: 'years'
     }
 };
@@ -142,6 +158,128 @@ const renderTimelineCard = (title, icon, color, mainEMI, period, duration, compo
         </div>
     </div>
 );
+
+// --- NEW COMPONENT: Mobile Accordion Timeline ---
+const MobileTimelineAccordion = ({ breakdown, onViewSchedule }) => {
+    // State to track which section is open (default to 'phase1')
+    const [openSection, setOpenSection] = useState('phase1');
+
+    const toggleSection = (section) => {
+        setOpenSection(openSection === section ? '' : section);
+    };
+
+    // Reusable Accordion Item
+    const AccordionItem = ({ id, title, subtitle, amount, color, icon, children }) => {
+        const isOpen = openSection === id;
+        return (
+            <div className={`card mb-3 border-${color} shadow-sm overflow-hidden`}>
+                {/* Clickable Header */}
+                <div
+                    className={`card-header bg-${color} bg-opacity-10 p-3 d-flex align-items-center justify-content-between`}
+                    onClick={() => toggleSection(id)}
+                    style={{ cursor: 'pointer' }}
+                >
+                    <div className="d-flex align-items-center overflow-hidden">
+                        <div className={`rounded-circle bg-${color} text-white d-flex align-items-center justify-content-center me-3 flex-shrink-0`}
+                            style={{ width: '40px', height: '40px' }}>
+                            <i className={`bi ${icon} fs-5`}></i>
+                        </div>
+                        <div>
+                            <h6 className={`mb-0 fw-bold text-${color}`}>{title}</h6>
+                            <small className="text-muted text-truncate d-block" style={{ fontSize: '0.75rem' }}>
+                                {subtitle}
+                            </small>
+                        </div>
+                    </div>
+
+                    <div className="text-end ms-2">
+                        <div className={`fw-bold text-${color}`} style={{ fontSize: '0.9rem' }}>{amount}</div>
+                        <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'} text-muted small`}></i>
+                    </div>
+                </div>
+
+                {/* Collapsible Body */}
+                {isOpen && (
+                    <div className="card-body bg-white animate-fade-in">
+                        {children}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
+    return (
+        <div className="mt-4">
+
+            {/* 1. Pre-Possession Accordion */}
+            <AccordionItem
+                id="phase1"
+                title="Timeline 1: Pre-Possession"
+                subtitle={`Month 0 - ${breakdown.possessionMonths} (Construction)`}
+                amount={formatCurrency(breakdown.prePossessionTotal)}
+                color="primary"
+                icon="bi-hourglass-split"
+            >
+                <div className="p-2 bg-light rounded border border-light mb-3">
+                    <div className="d-flex justify-content-between mb-2 small">
+                        <span className="text-muted">Personal Loan 1 EMI</span>
+                        <span className="fw-bold">{formatCurrency(breakdown.personalLoan1EMI)}/mo</span>
+                    </div>
+                    {breakdown.hasIDC && (
+                        <div className="d-flex justify-content-between small">
+                            <span className="text-muted">Avg. IDC Interest</span>
+                            <span className="fw-bold text-warning-emphasis">{formatCurrency(breakdown.monthlyIDCEMI)}/mo</span>
+                        </div>
+                    )}
+                </div>
+
+                {/* View Schedule Button */}
+                {breakdown.hasIDC && (
+                    <button
+                        className="btn btn-sm btn-outline-primary w-100 rounded-pill"
+                        onClick={onViewSchedule}
+                    >
+                        View Full Schedule
+                    </button>
+                )}
+            </AccordionItem>
+
+            {/* 2. Post-Possession Accordion */}
+            <AccordionItem
+                id="phase2"
+                title="Timeline 2: Post-Possession"
+                subtitle={`Month ${breakdown.possessionMonths + 1} Onwards`}
+                amount={`${formatCurrency(breakdown.postPossessionEMI)}/mo`}
+                color="success"
+                icon="bi-house-check-fill"
+            >
+                <div className="p-2 bg-light rounded border border-light mb-2">
+                    <div className="d-flex justify-content-between mb-2 small">
+                        <span className="text-muted">Home Loan EMI</span>
+                        <span className="fw-bold">{formatCurrency(breakdown.homeLoanEMI)}</span>
+                    </div>
+                    <div className="d-flex justify-content-between mb-2 small">
+                        <span className="text-muted">PL1 EMI</span>
+                        <span className="fw-bold">{formatCurrency(breakdown.personalLoan1EMI)}</span>
+                    </div>
+                    {breakdown.hasPersonalLoan2 && (
+                        <div className="d-flex justify-content-between small">
+                            <span className="text-muted">PL2 EMI</span>
+                            <span className="fw-bold">{formatCurrency(breakdown.personalLoan2EMI)}</span>
+                        </div>
+                    )}
+                </div>
+                <div className="text-end">
+                    <small className="text-success fst-italic" style={{ fontSize: '0.7rem' }}>
+                        <i className="bi bi-check2-circle me-1"></i>
+                        Principal Repayment Starts
+                    </small>
+                </div>
+            </AccordionItem>
+
+        </div>
+    );
+};
 // Add this with your other render functions at the top
 const renderProfitChart = (profits) => {
     if (!profits || profits.length === 0) return null;
@@ -331,11 +469,23 @@ const PropertyComparisonMobile = () => {
     const handleInputChange = (field, value) => setPropertyData(prev => ({ ...prev, [field]: value }));
 
     const updatePropertyField = (index, field, value) => {
+        // 1. Copy the array
         const newProperties = [...propertyData.properties];
+
+        // 2. Parse the value
         const newValue = (field === 'name' || field === 'location') ? value : parseFloat(value) || '';
-        newProperties[index][field] = newValue;
+
+        // 3. ✅ CRITICAL FIX: Create a NEW object for the specific property
+        // (This prevents overwriting the INITIAL_PROPERTY_DATA constant)
+        newProperties[index] = {
+            ...newProperties[index],
+            [field]: newValue
+        };
+
+        // 4. Update state
         setPropertyData(prev => ({ ...prev, properties: newProperties }));
 
+        // 5. Update selection if needed
         if (newProperties[index].id === userSelections.selectedPropertyId && field === 'size') {
             setUserSelections(prev => ({ ...prev, selectedPropertySize: newValue }));
         }
@@ -377,12 +527,61 @@ const PropertyComparisonMobile = () => {
         setUserSelections(prev => ({ ...prev, scenarioExitPrices: [...prev.scenarioExitPrices, baseline + 500] }));
     };
 
+    const handleDeleteExitPriceScenario = (indexToDelete) => {
+        setUserSelections(prev => ({
+            ...prev,
+            scenarioExitPrices: prev.scenarioExitPrices.filter((_, index) => index !== indexToDelete)
+        }));
+    };
+
     const handleResetData = () => {
-        if (window.confirm("Reset all inputs?")) {
-            setPropertyData({ ...INITIAL_PROPERTY_DATA, paymentPlan: propertyData.paymentPlan, assumptions: propertyData.assumptions });
+        if (window.confirm("Reset Property Details? \n(Note: Your Loan Distribution & Payment Plan settings will be KEPT)")) {
+
+            setPropertyData(prev => ({
+                // 1. Load the clean defaults (Clears Price, Taxes, etc.)
+                ...INITIAL_PROPERTY_DATA,
+
+                // 2. Preserve Payment Plan
+                paymentPlan: prev.paymentPlan,
+
+                // 3. Selective Assumption Reset
+                assumptions: {
+                    ...INITIAL_PROPERTY_DATA.assumptions, // Loads empty rates/tenures
+
+                    // ✅ ONLY restore the user's split percentages
+                    homeLoanShare: prev.assumptions.homeLoanShare,
+                    personalLoan1Share: prev.assumptions.personalLoan1Share,
+                    personalLoan2Share: prev.assumptions.personalLoan2Share,
+                    downPaymentShare: prev.assumptions.downPaymentShare,
+
+                    // Reset possession since it's property-specific
+                    possessionMonths: ''
+                },
+
+                // 4. Force-Reset the Property List 
+                // (This bypasses any 'sticky' data in the constant)
+                properties: [
+                    {
+                        id: 1,
+                        size: '',
+                        name: '',
+                        location: '',
+                        rating: 0,
+                        isHighlighted: true,
+                        possessionMonths: ''
+                    }
+                ]
+            }));
+
+            // Reset User Selections
             setUserSelections(INITIAL_USER_SELECTIONS);
+
+            // Reset UI State
             setCurrentStep(1);
             setMaxStepReached(1);
+            setValidationError('');
+
+            // alert("Reset Complete"); // Optional feedback
         }
     };
 
@@ -1417,7 +1616,7 @@ const PropertyComparisonMobile = () => {
                                                     step="0.5"
                                                     className="form-control"
                                                     value={propertyData.assumptions.clpDurationYears}
-                                                    placeholder={placeholders.clpDurationYears}
+                                                    placeholder='e.g. 2 Years'
                                                     onChange={(e) => handleAssumptionChange('clpDurationYears', e.target.value)}
                                                 />
                                                 <small className="small text-muted">Total construction period</small>
@@ -1429,7 +1628,7 @@ const PropertyComparisonMobile = () => {
                                                     type="number"
                                                     className="form-control"
                                                     value={propertyData.assumptions.bankDisbursementInterval}
-                                                    placeholder={placeholders.bankDisbursementInterval}
+                                                    placeholder='e.g. 2 months'
                                                     onChange={(e) => handleAssumptionChange('bankDisbursementInterval', e.target.value)}
                                                 />
                                                 <small className="small text-muted">Months between disbursements</small>
@@ -1450,7 +1649,7 @@ const PropertyComparisonMobile = () => {
                                                         type="number"
                                                         className="form-control"
                                                         value={propertyData.assumptions.bankDisbursementStartMonth}
-                                                        placeholder={placeholders.bankDisbursementStartMonth}
+                                                        placeholder='e.g. 2'
                                                         onChange={(e) => handleAssumptionChange('bankDisbursementStartMonth', e.target.value)}
                                                     />
                                                 </div>
@@ -1500,7 +1699,7 @@ const PropertyComparisonMobile = () => {
                                                 step="0.1"
                                                 className="form-control"
                                                 value={propertyData.assumptions.homeLoanRate}
-                                                placeholder={placeholders.homeLoanRate}
+                                                placeholder='e.g. 10%'
                                                 onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
                                             />
                                             <span className="input-group-text bg-white text-muted">%</span>
@@ -1516,7 +1715,7 @@ const PropertyComparisonMobile = () => {
                                             type="number"
                                             className="form-control"
                                             value={propertyData.assumptions.homeLoanTerm}
-                                            placeholder={placeholders.investmentPeriod}
+                                            placeholder='e.g. 20'
                                             onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
                                         />
                                     </div>
@@ -1665,7 +1864,7 @@ const PropertyComparisonMobile = () => {
                                                 step="0.1"
                                                 className="form-control"
                                                 value={propertyData.assumptions.personalLoan1Rate}
-                                                placeholder={placeholders.personalLoan1Rate}
+                                                placeholder='e.g. 10%'
                                                 onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
                                             />
                                             <span className="input-group-text bg-white text-muted">%</span>
@@ -1739,7 +1938,7 @@ const PropertyComparisonMobile = () => {
                                                 step="0.1"
                                                 className="form-control"
                                                 value={propertyData.assumptions.personalLoan2Rate}
-                                                placeholder={placeholders.personalLoan2Rate}
+                                                placeholder='e.g. 10%'
                                                 onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
                                                 disabled={propertyData.assumptions.personalLoan2Share === 0}
                                             />
@@ -1777,18 +1976,74 @@ const PropertyComparisonMobile = () => {
                 );
             case 4:
                 return (
-                    <div>
-                        <label className="form-label small text-muted">Expected Exit Price <span className="text-danger">*</span></label>
-                        <input type="number" className="form-control form-control-sm mb-3" value={userSelections.selectedExitPrice} onChange={(e) => handleSelectionUpdate('selectedExitPrice', e.target.value)} />
-
-                        <label className="form-label small text-muted">Add Scenarios</label>
-                        <div className="d-flex gap-2 mb-3">
-                            <button className="btn btn-outline-primary btn-sm flex-grow-1" onClick={handleAddExitPriceScenario}>+ Add Higher Price</button>
+                    <div className='animate-fade-in'>
+                        {/* Input for the MAIN Exit Price */}
+                        <div className="mb-4">
+                            <label className="form-label small text-muted fw-bold">
+                                Expected Exit Price (Base) <span className="text-danger">*</span>
+                            </label>
+                            <div className="input-group">
+                                <span className="input-group-text bg-white text-muted">₹</span>
+                                <input
+                                    type="number"
+                                    className="form-control"
+                                    value={userSelections.selectedExitPrice}
+                                    placeholder="e.g. 6000"
+                                    onChange={(e) => handleSelectionUpdate('selectedExitPrice', e.target.value)}
+                                />
+                            </div>
+                            <small className="text-muted" style={{ fontSize: '0.7rem' }}>
+                                This is your primary target for ROI calculation.
+                            </small>
                         </div>
-                        <div className="d-flex flex-wrap gap-2">
-                            {userSelections.scenarioExitPrices.map((p, i) => (
-                                <span key={i} className="badge bg-light text-dark border">₹{p}</span>
-                            ))}
+
+                        <hr className="border-secondary opacity-10 my-4" />
+
+                        {/* Section for Extra Scenarios */}
+                        <div className="mb-3">
+                            <label className="form-label small text-muted fw-bold d-flex justify-content-between align-items-center">
+                                <span>Compare Higher Prices</span>
+                                <span className="badge bg-light text-secondary border">
+                                    {userSelections.scenarioExitPrices.length} Added
+                                </span>
+                            </label>
+
+                            {/* The "Add" Button */}
+                            <button
+                                className="btn btn-outline-primary btn-sm w-100 mb-3 border-dashed d-flex align-items-center justify-content-center py-2"
+                                onClick={handleAddExitPriceScenario}
+                                style={{ borderStyle: 'dashed' }}
+                            >
+                                <i className="bi bi-plus-circle me-2"></i> Add Higher Scenario (+500)
+                            </button>
+
+                            {/* The Chips with Delete Option */}
+                            <div className="d-flex flex-wrap gap-2">
+                                {userSelections.scenarioExitPrices.length === 0 && (
+                                    <div className="text-center w-100 text-muted fst-italic py-2" style={{ fontSize: '0.75rem' }}>
+                                        No extra scenarios added yet.
+                                    </div>
+                                )}
+
+                                {userSelections.scenarioExitPrices.map((price, index) => (
+                                    <div
+                                        key={index}
+                                        className="d-flex align-items-center bg-white border rounded-pill ps-3 pe-1 py-1 shadow-sm"
+                                        style={{ fontSize: '0.85rem' }}
+                                    >
+                                        <span className="fw-bold text-dark me-2">₹{price}</span>
+
+                                        {/* The Delete Button (X) */}
+                                        <button
+                                            className="btn btn-link text-danger p-0 d-flex align-items-center justify-content-center"
+                                            style={{ width: '24px', height: '24px', textDecoration: 'none' }}
+                                            onClick={() => handleDeleteExitPriceScenario(index)}
+                                        >
+                                            <i className="bi bi-x-circle-fill fs-6"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 );
@@ -1914,7 +2169,7 @@ const PropertyComparisonMobile = () => {
                                 </div>
                                 {/* Content */}
                                 <div>
-                                    <h6 className="fw-bold text-dark mb-1">Standard CLP</h6>
+                                    <h6 className="fw-bold mb-1">Standard CLP</h6>
                                     <p className="text-muted small mb-2" style={{ fontSize: '0.75rem', lineHeight: '1.4' }}>
                                         Lower monthly burden. Best for cash flow management.
                                     </p>
@@ -1927,7 +2182,7 @@ const PropertyComparisonMobile = () => {
 
                             {/* Price */}
                             <div className="text-end">
-                                <span className="fw-bold d-block text-dark">{formatCurrency(standardTotalPaid)}</span>
+                                <span className="fw-bold d-block">{formatCurrency(standardTotalPaid)}</span>
                                 <small className="text-muted" style={{ fontSize: '0.65rem' }}>Paid till Poss.</small>
                             </div>
                         </div>
@@ -2042,7 +2297,6 @@ const PropertyComparisonMobile = () => {
                 )}
 
                 {/* Header Section */}
-                {/* Header Section (Responsive Action Bar) */}
                 <div className="glass-card mb-4 p-3">
                     <div className="d-flex justify-content-between align-items-center">
 
@@ -2053,7 +2307,6 @@ const PropertyComparisonMobile = () => {
                             </div>
                             <div>
                                 <h5 className="fw-bold mb-0">Analysis Report</h5>
-                                <small className="text-muted d-none d-sm-block">Generated on {new Date().toLocaleDateString()}</small>
                             </div>
                         </div>
 
@@ -2103,7 +2356,7 @@ const PropertyComparisonMobile = () => {
                             <div className="col-6 p-3 border-end border-bottom text-center">
                                 <i className="bi bi-cash-stack fs-3 text-primary mb-2 d-block"></i>
                                 <small className="text-muted fw-bold d-block mb-1" style={{ fontSize: '0.7rem' }}>Total Cost</small>
-                                <h5 className="fw-bold mb-0 text-dark">{formatLakhs(breakdown.totalCost)}</h5>
+                                <h5 className="fw-bold mb-0">{formatLakhs(breakdown.totalCost)}</h5>
                             </div>
 
                             {/* 2. Net Profit (Top Right) - Swapped Holding Period for Profit to match Image */}
@@ -2130,7 +2383,7 @@ const PropertyComparisonMobile = () => {
                             <div className="col-6 p-3 text-center">
                                 <i className="bi bi-wallet2 fs-3 text-info mb-2 d-block"></i>
                                 <small className="text-muted fw-bold d-block mb-1" style={{ fontSize: '0.7rem' }}>Cash-in-Hand</small>
-                                <h5 className="fw-bold mb-0 text-dark">{formatLakhs(breakdown.leftoverCash)}</h5>
+                                <h5 className="fw-bold mb-0">{formatLakhs(breakdown.leftoverCash)}</h5>
                             </div>
                         </div>
                     </div>
@@ -2156,7 +2409,7 @@ const PropertyComparisonMobile = () => {
                                     {calculatedData.stageCalculations.stage1.items.map((item, idx) => (
                                         <li key={idx} className="d-flex justify-content-between mb-1">
                                             <span className="text-muted" style={{ fontSize: '0.75rem' }}>{item.label}</span>
-                                            <span className="fw-bold text-dark" style={{ fontSize: '0.75rem' }}>{item.value}</span>
+                                            <span className="fw-bold" style={{ fontSize: '0.75rem' }}>{item.value}</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -2176,7 +2429,7 @@ const PropertyComparisonMobile = () => {
                                     {calculatedData.stageCalculations.stage2.items.map((item, idx) => (
                                         <li key={idx} className="d-flex justify-content-between mb-1">
                                             <span className="text-muted" style={{ fontSize: '0.75rem' }}>{item.label}</span>
-                                            <span className="fw-bold text-dark" style={{ fontSize: '0.75rem' }}>{item.value}</span>
+                                            <span className="fw-bold" style={{ fontSize: '0.75rem' }}>{item.value}</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -2196,7 +2449,7 @@ const PropertyComparisonMobile = () => {
                                     {calculatedData.stageCalculations.stage3.items.map((item, idx) => (
                                         <li key={idx} className="d-flex justify-content-between mb-1">
                                             <span className="text-muted" style={{ fontSize: '0.75rem' }}>{item.label}</span>
-                                            <span className="fw-bold text-dark" style={{ fontSize: '0.75rem' }}>{item.value}</span>
+                                            <span className="fw-bold" style={{ fontSize: '0.75rem' }}>{item.value}</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -2216,7 +2469,7 @@ const PropertyComparisonMobile = () => {
                                     {calculatedData.stageCalculations.stage4.items.map((item, idx) => (
                                         <li key={idx} className="d-flex justify-content-between mb-1">
                                             <span className="text-muted" style={{ fontSize: '0.75rem' }}>{item.label}</span>
-                                            <span className="fw-bold text-dark" style={{ fontSize: '0.75rem' }}>{item.value}</span>
+                                            <span className="fw-bold" style={{ fontSize: '0.75rem' }}>{item.value}</span>
                                         </li>
                                     ))}
                                 </ul>
@@ -2387,6 +2640,21 @@ const PropertyComparisonMobile = () => {
 
     const renderBreakdownTab = () => {
         const breakdown = calculatedData.detailedBreakdown;
+        const handleViewScheduleClick = () => {
+            handleDelayedNavigation('/monthly-breakdown', {
+                idcSchedule: breakdown.idcSchedule,
+                pl1EMI: breakdown.personalLoan1EMI,
+                possessionMonths: breakdown.possessionMonths,
+                totalHoldingMonths: breakdown.totalHoldingMonths,
+                homeLoanAmount: breakdown.homeLoanAmount,
+                interestRate: propertyData.assumptions.homeLoanRate,
+                propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
+                homeLoanTerm: propertyData.assumptions.homeLoanTerm,
+                lastBankDisbursementMonth: getSafeValue(propertyData.assumptions.lastBankDisbursementMonth) || null,
+                homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
+                manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth)
+            }, "Loading Monthly Schedule...");
+        };
 
         if (!breakdown) {
             return (
@@ -2437,101 +2705,20 @@ const PropertyComparisonMobile = () => {
                         EMI Timeline
                     </h6>
 
-                    <div className="d-flex flex-column gap-3">
-                        {/* Timeline 1: Pre-Possession */}
-                        {renderTimelineCard(
-                            "Phase 1: Pre-Possession",
-                            "bi-calendar-week",
-                            "primary",
-                            formatCurrency(breakdown.prePossessionTotal),
-                            `Months 0 - ${breakdown.prePossessionMonths}`,
-                            `${breakdown.prePossessionMonths} mo`,
-                            <>
-                                {/* PL1 Card */}
-                                <div className="col-12 mt-2">
-                                    <div
-                                        className="p-3 rounded border bg-white shadow-sm"
-                                        onClick={() => handleDelayedNavigation('/monthly-breakdown', { /* ... pass params ... */ }, "Loading Schedule...")}
-                                    >
-                                        <div className="d-flex justify-content-between align-items-center">
-                                            <div>
-                                                <small className="text-muted d-block">Personal Loan 1</small>
-                                                <span className="fw-bold text-primary">{formatCurrency(breakdown.personalLoan1EMI)}</span>
-                                            </div>
-                                            <i className="bi bi-chevron-right text-muted"></i>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* IDC Card */}
-                                {breakdown.hasIDC && (
-                                    <div className="col-12 mt-2">
-                                        <div
-                                            className="p-3 rounded border bg-white shadow-sm"
-                                            onClick={() => handleDelayedNavigation('/schedule', { /* ... pass params ... */ }, "Loading IDC...")}
-                                        >
-                                            <div className="d-flex justify-content-between align-items-center mb-2">
-                                                <small className="text-muted">IDC (Interest)</small>
-                                                <i className="bi bi-chevron-right text-muted"></i>
-                                            </div>
-                                            <div className="d-flex justify-content-between text-center small">
-                                                <div>
-                                                    <span className="d-block text-muted" style={{ fontSize: '0.65rem' }}>Start</span>
-                                                    <span className="fw-bold">{formatCurrency(breakdown.minIDCEMI)}</span>
-                                                </div>
-                                                <div className="border-start border-end px-3">
-                                                    <span className="d-block text-muted" style={{ fontSize: '0.65rem' }}>Avg</span>
-                                                    <span className="fw-bold text-primary">{formatCurrency(breakdown.monthlyIDCEMI)}</span>
-                                                </div>
-                                                <div>
-                                                    <span className="d-block text-muted" style={{ fontSize: '0.65rem' }}>Peak</span>
-                                                    <span className="fw-bold text-danger">{formatCurrency(breakdown.maxIDCEMI)}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-                            </>,
-                            formatCurrency(breakdown.prePossessionTotal),
-                            `Total Paid: ${formatCurrency(breakdown.prePossessionTotal)}`,
-                            "Total Outflow",
-                            null
-                        )}
-
-                        {/* Timeline 2: Post-Possession */}
-                        {breakdown.postPossessionMonths > 0 ? (
-                            renderTimelineCard(
-                                "Phase 2: Post-Possession",
-                                "bi-calendar-check",
-                                "success",
-                                `${formatCurrency(breakdown.postPossessionEMI)}/mo`,
-                                `Months ${breakdown.possessionMonths + 1} - ${breakdown.totalHoldingMonths}`,
-                                `${breakdown.postPossessionMonths} mo`,
-                                <div className="row g-2 mt-1">
-                                    {renderComponentBox("Home Loan", formatCurrency(breakdown.homeLoanEMI), 6)}
-                                    {renderComponentBox("PL 1", formatCurrency(breakdown.personalLoan1EMI), 6)}
-                                    {breakdown.hasPersonalLoan2 && renderComponentBox("PL 2", formatCurrency(breakdown.personalLoan2EMI), 12)}
-                                </div>,
-                                formatCurrency(breakdown.postPossessionTotal),
-                                "Total during holding period"
-                            )
-                        ) : (
-                            <div className="alert alert-secondary d-flex align-items-center mb-0">
-                                <i className="bi bi-info-circle me-3 fs-4"></i>
-                                <small className="lh-sm">Investment exit planned before Phase 2 starts.</small>
-                            </div>
-                        )}
-                    </div>
+                    <MobileTimelineAccordion
+                        breakdown={breakdown}
+                        onViewSchedule={handleViewScheduleClick}
+                    />
                 </div>
 
                 {/* 3. Interest During Construction (Simplified) */}
                 {breakdown.hasIDC && (
                     <div className="glass-card mb-4 p-3">
-                        <h6 className="fw-bold text-muted mb-3">
+                        <h6 className="fw-bold mb-3">
                             <i className="bi bi-tools me-2"></i>IDC Summary
                         </h6>
                         <div className="row g-2">
-                            {renderStatCard("Avg Monthly", formatCurrency(breakdown.monthlyIDCEMI), "", "warning", 6)}
+                            {renderStatCard("Avg Monthly", formatCurrency(breakdown.monthlyIDCEMI), "", "info", 6)}
                             {renderStatCard("Total Interest", formatCurrency(breakdown.totalIDC), "Construction Phase", "danger", 6)}
                         </div>
                     </div>
@@ -2545,11 +2732,11 @@ const PropertyComparisonMobile = () => {
 
                     {/* Home Loan */}
                     <div className="glass-card p-3 mb-3">
-                        <h6 className="small fw-bold text-muted mb-3 text-uppercase">Home Loan Breakdown</h6>
+                        <h6 className="small fw-bold mb-3 text-uppercase">Home Loan Breakdown</h6>
                         <div className="row g-2">
                             {renderStatCard("EMI Amount", formatCurrency(breakdown.homeLoanEMI), "Monthly", "primary", 6)}
                             {renderStatCard("Total Paid", formatCurrency(breakdown.homeLoanEMIPaid), "Principal + Int", "success", 6)}
-                            {renderStatCard("Interest Only", formatCurrency(breakdown.homeLoanInterestPaid), "Cost of Loan", "warning", 6)}
+                            {renderStatCard("Interest Only", formatCurrency(breakdown.homeLoanInterestPaid), "Cost of Loan", "info", 6)}
                             {renderStatCard("Balance Due", formatCurrency(breakdown.homeLoanOutstanding), "To Close", "danger", 6)}
                         </div>
                     </div>
@@ -2557,9 +2744,9 @@ const PropertyComparisonMobile = () => {
                     {/* Personal Loans (Conditional) */}
                     {(breakdown.hasPersonalLoan1 || breakdown.hasPersonalLoan2) && (
                         <div className="glass-card p-3">
-                            <h6 className="small fw-bold text-muted mb-3 text-uppercase">Personal Loans</h6>
+                            <h6 className="small fw-bold mb-3 text-uppercase">Personal Loans</h6>
                             <div className="row g-2">
-                                {breakdown.hasPersonalLoan1 && renderStatCard("PL1 Total Paid", formatCurrency(breakdown.personalLoan1EMIPaid), "Loan 1", "info", 6)}
+                                {breakdown.hasPersonalLoan1 && renderStatCard("PL1 Total Paid", formatCurrency(breakdown.personalLoan1EMIPaid), "Loan 1", "success", 6)}
                                 {breakdown.hasPersonalLoan2 && renderStatCard("PL2 Total Paid", formatCurrency(breakdown.personalLoan2EMIPaid), "Loan 2", "info", 6)}
                             </div>
                         </div>
@@ -2567,16 +2754,16 @@ const PropertyComparisonMobile = () => {
                 </div>
 
                 {/* 5. Final Financial Summaries */}
-                <div className="glass-card mb-4 p-3 border-warning">
+                <div className="glass-card mb-4 p-3">
                     <div className="d-flex justify-content-between align-items-center mb-2">
                         <h6 className="fw-bold mb-0">Total Interest Cost</h6>
-                        <span className="badge bg-warning text-dark">{breakdown.years} Years</span>
+                        <span className="badge bg-warning">{breakdown.years} Years</span>
                     </div>
-                    <h2 className="fw-bold text-dark mb-0">{formatLakhs(breakdown.totalInterestPaid)}</h2>
+                    <h2 className="fw-bold mb-0">{formatLakhs(breakdown.totalInterestPaid)}</h2>
                     {breakdown.hasIDC && <small className="text-muted">Includes construction interest</small>}
                 </div>
 
-                <div className="glass-card mb-4 p-3 border-2 border-success">
+                <div className="glass-card mb-4 p-3 border-2">
                     <div className="d-flex justify-content-between align-items-center mb-2">
                         <h6 className="fw-bold mb-0">Projected Cash Exit</h6>
                         <span className="badge bg-success">@ ₹{breakdown.exitPrice}</span>
@@ -2598,92 +2785,71 @@ const PropertyComparisonMobile = () => {
         );
     };
 
-    // 4. BOTTOM NAVIGATION (Dark Blue in Dark Mode)
-    const renderBottomNav = () => (
-        <div 
-            className="fixed-bottom shadow-lg pb-safe-area mobile-bottom-nav" 
-            style={{ 
-                zIndex: 1050, 
-                transition: 'background-color 0.3s ease, border-color 0.3s ease'
-            }} 
-        >
-            <div className="d-flex justify-content-around py-2">
-                
-                {/* 1. INPUTS TAB */}
-                <button
-                    type="button"
-                    className="btn btn-link text-decoration-none p-1"
-                    onClick={() => setActiveTab('inputs')}
-                    style={{ minWidth: '70px' }} 
-                >
-                    {activeTab === 'inputs' ? (
-                        <div className="d-flex flex-column align-items-center animate-fade-in">
-                            <span className="badge rounded-pill bg-primary px-3 py-1 mb-1 shadow-sm">
-                                <i className="bi bi-sliders fs-6 text-white"></i>
-                            </span>
-                            <span className="text-primary fw-bold" style={{ fontSize: '0.7rem' }}>Inputs</span>
-                        </div>
-                    ) : (
-                        <div 
-                            className="d-flex flex-column align-items-center opacity-75 nav-item-inactive"
-                        >
-                            <i className="bi bi-sliders fs-5 mb-1"></i>
-                            <span style={{ fontSize: '0.7rem' }}>Inputs</span>
-                        </div>
-                    )}
-                </button>
+    // 4. BOTTOM NAVIGATION - "Expanding Pill" Layout
+    const renderBottomNav = () => {
+        const navItems = [
+            { id: 'inputs', label: 'Inputs', icon: 'bi-sliders' },
+            { id: 'overview', label: 'Overview', icon: 'bi-speedometer2' },
+            { id: 'breakdown', label: 'Details', icon: 'bi-calculator-fill' },
+        ];
 
-                {/* 2. OVERVIEW TAB */}
-                <button
-                    type="button"
-                    className="btn btn-link text-decoration-none p-1"
-                    onClick={() => setActiveTab('overview')}
-                    style={{ minWidth: '70px' }}
-                >
-                    {activeTab === 'overview' ? (
-                        <div className="d-flex flex-column align-items-center animate-fade-in">
-                            <span className="badge rounded-pill bg-primary px-3 py-1 mb-1 shadow-sm">
-                                <i className="bi bi-speedometer2 fs-6 text-white"></i>
-                            </span>
-                            <span className="text-primary fw-bold" style={{ fontSize: '0.7rem' }}>Overview</span>
-                        </div>
-                    ) : (
-                        <div 
-                            className="d-flex flex-column align-items-center opacity-75 nav-item-inactive"
-                        >
-                            <i className="bi bi-speedometer2 fs-5 mb-1"></i>
-                            <span style={{ fontSize: '0.7rem' }}>Overview</span>
-                        </div>
-                    )}
-                </button>
+        return (
+            <div
+                className="fixed-bottom bg-white shadow-lg"
+                style={{
+                    borderRadius: '20px 20px 0 0', // Soft rounded top corners
+                    paddingBottom: 'env(safe-area-inset-bottom)', // Handle iPhone X+ safe area
+                    zIndex: 1050
+                }}
+            >
+                <div className="d-flex justify-content-around align-items-center py-3 px-2">
+                    {navItems.map((item) => {
+                        const isActive = activeTab === item.id;
 
-                {/* 3. DETAILS TAB */}
-                <button
-                    type="button"
-                    className="btn btn-link text-decoration-none p-1"
-                    onClick={() => setActiveTab('breakdown')}
-                    style={{ minWidth: '70px' }}
-                >
-                    {activeTab === 'breakdown' ? (
-                        <div className="d-flex flex-column align-items-center animate-fade-in">
-                            <span className="badge rounded-pill bg-primary px-3 py-1 mb-1 shadow-sm">
-                                <i className="bi bi-calculator-fill fs-6 text-white"></i>
-                            </span>
-                            <span className="text-primary fw-bold" style={{ fontSize: '0.7rem' }}>Details</span>
-                        </div>
-                    ) : (
-                        <div 
-                            className="d-flex flex-column align-items-center opacity-75 nav-item-inactive"
-                        >
-                            <i className="bi bi-calculator fs-5 mb-1"></i>
-                            <span style={{ fontSize: '0.7rem' }}>Details</span>
-                        </div>
-                    )}
-                </button>
+                        return (
+                            <div
+                                key={item.id}
+                                onClick={() => setActiveTab(item.id)}
+                                role="button"
+                                className={`d-flex align-items-center justify-content-center`}
+                                style={{
+                                    // Active State: Primary Color Bg, White Text
+                                    // Inactive State: Transparent Bg, Muted Text
+                                    backgroundColor: isActive ? 'var(--bs-primary)' : 'transparent',
+                                    color: isActive ? '#fff' : '#6c757d',
 
+                                    // Shape & Size
+                                    borderRadius: '50px',
+                                    padding: isActive ? '10px 20px' : '10px',
+
+                                    // The Smooth Animation
+                                    transition: 'all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1)',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                {/* Icon */}
+                                <i className={`bi ${item.icon} fs-5`}></i>
+
+                                {/* Label (Visible only when active) */}
+                                <div
+                                    style={{
+                                        maxWidth: isActive ? '100px' : '0', // Animate width
+                                        opacity: isActive ? 1 : 0,           // Animate opacity
+                                        overflow: 'hidden',
+                                        whiteSpace: 'nowrap',
+                                        transition: 'all 0.3s ease-out',
+                                        marginLeft: isActive ? '8px' : '0'
+                                    }}
+                                >
+                                    <span className="fw-bold small">{item.label}</span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     // --- MAIN RENDER ---
     return (
