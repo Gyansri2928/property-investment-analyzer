@@ -390,6 +390,7 @@ const renderKeyInsights = (breakdown) => {
 // ===================== MAIN COMPONENT =====================
 const PropertyComparisonMobile = () => {
     const navigate = useNavigate();
+    const [showPreview, setShowPreview] = useState(false);
     const [currentStep, setCurrentStep] = useState(() => {
         // Check if we have saved data in LocalStorage
         const savedData = localStorage.getItem('propertyCalc_data');
@@ -495,6 +496,39 @@ const PropertyComparisonMobile = () => {
         setPropertyData(prev => ({
             ...prev,
             assumptions: { ...prev.assumptions, [field]: (field === 'holdingPeriodUnit' || field === 'homeLoanStartMode') ? value : (value === '' ? '' : parseFloat(value)) }
+        }));
+    };
+
+    const handleAddProperty = () => {
+        // 1. FIX: Find the highest ID currently in the list
+        // If list is empty, start at 0 (so next is 1). If not, take the max ID found.
+        const maxId = propertyData.properties.reduce((max, prop) => (prop.id > max ? prop.id : max), 0);
+
+        // 2. Generate new unique ID
+        const newId = maxId + 1;
+
+        const newProperty = {
+            id: newId,
+            size: 1000,
+            name: `Property ${newId}`,
+            location: '',
+            // rating: 4.0, // (Optional based on your existing object structure)
+            // isHighlighted: false,
+            possessionMonths: 24
+        };
+
+        setPropertyData(prev => ({
+            ...prev,
+            properties: [...prev.properties, newProperty]
+        }));
+    };
+
+    const handleRemoveProperty = (id) => {
+        if (propertyData.properties.length <= 1) return;
+
+        setPropertyData(prev => ({
+            ...prev,
+            properties: prev.properties.filter(prop => prop.id !== id)
         }));
     };
 
@@ -1195,7 +1229,13 @@ const PropertyComparisonMobile = () => {
                             <button
                                 className="btn btn-success btn-sm d-flex align-items-center shadow-sm"
                                 onClick={handleResetData}
-                                title="Export to Excel"
+                                title="Reset All Inputs"
+                                style={{
+                                    borderRadius: '50px',
+                                    padding: '8px 20px',
+                                    borderWidth: '2px',
+                                    fontWeight: '600'
+                                }}
                             >
                                 Reset
                             </button>
@@ -1258,14 +1298,32 @@ const PropertyComparisonMobile = () => {
                                                 Back
                                             </button>
 
-                                            {/* ✅ FIX IS HERE: Conditional onClick */}
-                                            <button
-                                                className="btn btn-sm btn-primary rounded-pill px-4"
-                                                onClick={currentStep === 4 ? handleAnalyzeClick : handleNextStep}
-                                            >
-                                                {currentStep === 4 ? 'Analyze' : 'Next'}
-                                                <i className="bi bi-arrow-right ms-2"></i>
-                                            </button>
+                                            {currentStep === 4 ? (
+                                                <div className="d-flex gap-2">
+                                                    {/* Review Button */}
+                                                    <button
+                                                        className="btn btn-sm btn-primary rounded-pill px-3"
+                                                        onClick={() => setShowPreview(true)}
+                                                    >
+                                                        Review
+                                                    </button>
+                                                    {/* Analyze Button */}
+                                                    <button
+                                                        className="btn btn-sm btn-primary rounded-pill px-4"
+                                                        onClick={handleAnalyzeClick}
+                                                    >
+                                                        Analyze <i className="bi bi-graph-up ms-1"></i>
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                // Normal Next Button for Steps 1-3
+                                                <button
+                                                    className="btn btn-sm btn-primary rounded-pill px-4"
+                                                    onClick={handleNextStep}
+                                                >
+                                                    Next <i className="bi bi-arrow-right ms-2"></i>
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
                                 )}
@@ -1307,8 +1365,7 @@ const PropertyComparisonMobile = () => {
             const isOpen = activeAccordion === id;
 
             return (
-                <div className="mb-2"> {/* Reduced bottom margin */}
-
+                <div className="mb-3 bg-white rounded-3 shadow-sm border border-secondary border-opacity-10 overflow-hidden">
                     {/* Header (Clickable) */}
                     <div
                         className="card-header border-0 py-3 px-3 cursor-pointer d-flex justify-content-between align-items-center bg-transparent"
@@ -1316,13 +1373,13 @@ const PropertyComparisonMobile = () => {
                         style={{ cursor: 'pointer', touchAction: 'manipulation' }} // Optimize for touch
                     >
                         {/* Title (Left) - Using h6 for mobile compactness */}
-                        <h6 className={`mb-0 fw-bold ${isOpen ? '' : 'text-dark'}`}>
+                        <h6 className={`mb-0 fw-bold`}>
                             <i className={`bi ${icon} me-2 ${isOpen ? '' : 'text-muted'}`}></i>
                             {title}
                         </h6>
 
                         {/* Arrow Icon (Right) */}
-                        <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'} ${isOpen ? 'text-primary' : 'text-muted'}`}></i>
+                        <i className={`bi bi-chevron-${isOpen ? 'up' : 'down'} ${isOpen ? '' : 'text-muted'}`}></i>
                     </div>
 
                     {/* Content (Visible only if open) */}
@@ -1339,29 +1396,59 @@ const PropertyComparisonMobile = () => {
             case 1:
                 return (
                     <div className='animate-fade-in'>
-                        {/* 2. ACCORDION A: Individual Property Details */}
+                        {/* 2. ACCORDION A: Property Specifics */}
                         {renderAccordionSection(
                             'prop_mgmt',
-                            'Property Specifics',
+                            `Properties (${propertyData.properties.length})`,
                             'bi-building',
                             <div>
+                                {/* Add Property Button */}
+                                <div className="d-flex justify-content-end mb-3">
+                                    <button
+                                        className="btn btn-sm btn-primary rounded-pill d-flex align-items-center"
+                                        onClick={handleAddProperty}
+                                    >
+                                        <i className="bi bi-plus-circle me-1"></i> Add
+                                    </button>
+                                </div>
+
+                                {/* Property List */}
                                 {propertyData.properties.map((property, index) => (
-                                    <div key={property.id} className="mb-3 border-bottom pb-3 last-child-no-border">
-                                        {/* Property Name & Location */}
-                                        <div className="mb-2">
-                                            {renderPropertyInput(index, property, "Property Name", "name", "text", "e.g. Supernova", true)}
-                                        </div>
-                                        <div className="mb-2">
-                                            {renderPropertyInput(index, property, "Location", "location", "text", "e.g. Noida", true)}
+                                    <div key={property.id} className="card border-0 shadow-sm mb-3 overflow-hidden">
+
+                                        {/* Property Header (Darker Header for distinction) */}
+                                        <div className="card-header bg-light d-flex justify-content-between align-items-center py-2 px-3">
+                                            <span className="badge bg-primary rounded-pill">#{index + 1}</span>
+
+                                            {/* Delete Button (Only show if more than 1 property) */}
+                                            {propertyData.properties.length > 1 && (
+                                                <button
+                                                    className="btn btn-link text-danger p-0"
+                                                    onClick={() => handleRemoveProperty(property.id)}
+                                                    style={{ textDecoration: 'none' }}
+                                                >
+                                                    <i className="bi bi-trash"></i>
+                                                </button>
+                                            )}
                                         </div>
 
-                                        {/* Size & Possession Row */}
-                                        <div className="row g-2">
-                                            <div className="col-6">
-                                                {renderPropertyInput(index, property, "Size (sq.ft)", "size", "number", "e.g. 1000", true)}
+                                        <div className="card-body p-3">
+                                            {/* Property Name & Location */}
+                                            <div className="mb-2">
+                                                {renderPropertyInput(index, property, "Property Name", "name", "text", "e.g. Supernova", true)}
                                             </div>
-                                            <div className="col-6">
-                                                {renderPropertyInput(index, property, "Possession (Mo)", "possessionMonths", "number", "e.g. 24", true)}
+                                            <div className="mb-2">
+                                                {renderPropertyInput(index, property, "Location", "location", "text", "e.g. Noida", true)}
+                                            </div>
+
+                                            {/* Size & Possession Row */}
+                                            <div className="row g-2">
+                                                <div className="col-6">
+                                                    {renderPropertyInput(index, property, "Size (sq.ft)", "size", "number", "e.g. 1000", true)}
+                                                </div>
+                                                <div className="col-6">
+                                                    {renderPropertyInput(index, property, "Possession (Mo)", "possessionMonths", "number", "e.g. 24", true)}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1688,163 +1775,123 @@ const PropertyComparisonMobile = () => {
                             'bi-bank',
                             (
                                 <div className="row g-3">
-                                    {/* Column 1: Rate */}
-                                    <div className="col-md-3">
-                                        <label className="form-label small">
-                                            Home Loan Rate <span className="text-danger fw-bold">*</span>
-                                        </label>
-                                        <div className="input-group input-group-sm">
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                className="form-control"
-                                                value={propertyData.assumptions.homeLoanRate}
-                                                placeholder='e.g. 10%'
-                                                onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
-                                            />
-                                            <span className="input-group-text bg-white text-muted">%</span>
-                                        </div>
-                                    </div>
-
-                                    {/* Column 2: Term */}
-                                    <div className="col-md-3">
-                                        <label className="form-label">
-                                            Loan Term (Years) <span className="text-danger fw-bold">*</span>
-                                        </label>
+                                    {/* Row 1: Rate and Tenure */}
+                                    <div className="col-6">
+                                        <label className="form-label small">Rate (%) <span className="text-danger">*</span></label>
                                         <input
-                                            type="number"
-                                            className="form-control"
+                                            type="number" step="0.1" className="form-control form-control-sm"
+                                            value={propertyData.assumptions.homeLoanRate}
+                                            placeholder='e.g. 8.5'
+                                            onChange={(e) => handleAssumptionChange('homeLoanRate', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="col-6">
+                                        <label className="form-label small">Tenure (Yrs) <span className="text-danger">*</span></label>
+                                        <input
+                                            type="number" className="form-control form-control-sm"
                                             value={propertyData.assumptions.homeLoanTerm}
                                             placeholder='e.g. 20'
                                             onChange={(e) => handleAssumptionChange('homeLoanTerm', e.target.value)}
                                         />
                                     </div>
 
-                                    {/* Column 3: EMI Start Logic (Toggle & Inputs) */}
-                                    <div className="col-md-3">
-                                        <div className="d-flex justify-content-between align-items-center mb-1">
-                                            <label className="form-label mb-0 small fw-bold">EMI Start Logic</label>
+                                    {/* ✅ NEW: EMI Start Logic Section */}
+                                    <div className="col-12 mt-3">
+                                        <div className="p-3 bg-light rounded border border-secondary border-opacity-10">
 
-                                            {/* Mode Toggle Buttons */}
-                                            <div className="btn-group btn-group-sm" role="group">
-                                                <button
-                                                    type="button"
-                                                    className={`btn ${(!propertyData.assumptions.homeLoanStartMode || propertyData.assumptions.homeLoanStartMode === 'default') ? 'btn-primary' : 'btn-outline-secondary'}`}
-                                                    onClick={() => handleAssumptionChange('homeLoanStartMode', 'default')}
-                                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
-                                                >
-                                                    Default
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    className={`btn ${propertyData.assumptions.homeLoanStartMode === 'manual' ? 'btn-primary' : 'btn-outline-secondary'}`}
-                                                    onClick={() => handleAssumptionChange('homeLoanStartMode', 'manual')}
-                                                    style={{ fontSize: '0.7rem', padding: '0.25rem 0.5rem' }}
-                                                >
-                                                    Manual
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* CONDITIONAL RENDER: Based on Mode */}
-                                        {propertyData.assumptions.homeLoanStartMode === 'manual' ? (
-                                            // Option B: MANUAL MODE
-                                            <div className="mt-2">
-                                                <input
-                                                    type="number"
-                                                    className="form-control form-control-sm"
-                                                    value={propertyData.assumptions.homeLoanStartMonth}
-                                                    placeholder="e.g. 25"
-                                                    onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
-                                                />
-                                                <small className="text-muted" style={{ fontSize: '0.7rem' }}>
-                                                    Enter exact start month (e.g. 25)
-                                                </small>
-                                            </div>
-                                        ) : (
-                                            // Option A: DEFAULT MODE
-                                            <div>
-                                                {/* The Message */}
-                                                <div className="alert border p-1 mb-2 text-center text-muted" style={{ fontSize: '0.70rem', color: '#666', lineHeight: '1.2' }}>
-                                                    HL EMI may start after Last Demand (Constr. + Delay)
+                                            {/* Header & Toggle */}
+                                            <div className="d-flex justify-content-between align-items-center mb-3">
+                                                <label className="form-label mb-0 small fw-bold text-muted">EMI Start Logic</label>
+                                                <div className="btn-group btn-group-sm shadow-sm" role="group">
+                                                    <button
+                                                        type="button"
+                                                        className={`btn ${(!propertyData.assumptions.homeLoanStartMode || propertyData.assumptions.homeLoanStartMode === 'default') ? 'btn-primary' : 'btn-white border'}`}
+                                                        onClick={() => handleAssumptionChange('homeLoanStartMode', 'default')}
+                                                        style={{ fontSize: '0.75rem' }}
+                                                    >
+                                                        Auto
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        className={`btn ${propertyData.assumptions.homeLoanStartMode === 'manual' ? 'btn-primary' : 'btn-white border'}`}
+                                                        onClick={() => handleAssumptionChange('homeLoanStartMode', 'manual')}
+                                                        style={{ fontSize: '0.75rem' }}
+                                                    >
+                                                        Manual
+                                                    </button>
                                                 </div>
-
-                                                {/* The Slider */}
-                                                <label className="form-label small text-muted mb-0" style={{ fontSize: '0.75rem' }}>
-                                                    Delay: <strong>{propertyData.assumptions.homeLoanStartMonth} months</strong>
-                                                </label>
-                                                <input
-                                                    type="range"
-                                                    className="form-range"
-                                                    min="0"
-                                                    max="24" // Limit delay to 24 months
-                                                    value={propertyData.assumptions.homeLoanStartMonth || 0}
-                                                    onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
-                                                />
                                             </div>
-                                        )}
-                                    </div>
 
-                                    {/* Column 4: Display Logic */}
-                                    <div className="col-md-3">
-                                        <div className="p-3 bg-light rounded h-100 d-flex flex-column justify-content-center border border-light">
-                                            <small className="text-muted text-center" style={{ fontSize: '0.75rem' }}>Actual EMI Start</small>
-                                            <div className="fw-bold text-center fs-5 ">
-                                                Month {
-                                                    propertyData.assumptions.homeLoanStartMode === 'manual'
-                                                        ? (getSafeValue(propertyData.assumptions.homeLoanStartMonth))
-                                                        : (
-                                                            // Show calculated Result: Last Demand + Delay + 1
-                                                            (() => {
+                                            {/* Slider or Input based on Mode */}
+                                            {propertyData.assumptions.homeLoanStartMode === 'manual' ? (
+                                                <div className="mb-2">
+                                                    <label className="form-label small text-muted">Exact Start Month</label>
+                                                    <input
+                                                        type="number"
+                                                        className="form-control form-control-sm"
+                                                        value={propertyData.assumptions.homeLoanStartMonth}
+                                                        placeholder="e.g. 25"
+                                                        onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <div className="mb-2">
+                                                    <div className="d-flex justify-content-between mb-1">
+                                                        <label className="form-label small text-muted mb-0">Delay after Possession</label>
+                                                        <strong className="small">{propertyData.assumptions.homeLoanStartMonth} Months</strong>
+                                                    </div>
+                                                    <input
+                                                        type="range"
+                                                        className="form-range"
+                                                        min="0" max="24"
+                                                        value={propertyData.assumptions.homeLoanStartMonth || 0}
+                                                        onChange={(e) => handleAssumptionChange('homeLoanStartMonth', e.target.value)}
+                                                    />
+                                                </div>
+                                            )}
+
+                                            {/* Calculation Summary Box */}
+                                            <div className="bg-white p-2 rounded border text-center mt-2">
+                                                <small className="text-muted d-block" style={{ fontSize: '0.65rem' }}>
+                                                    EMI Starts On
+                                                </small>
+                                                <div className="fw-bold">
+                                                    Month {
+                                                        propertyData.assumptions.homeLoanStartMode === 'manual'
+                                                            ? (getSafeValue(propertyData.assumptions.homeLoanStartMonth))
+                                                            : (() => {
                                                                 const explicitLast = getSafeValue(propertyData.assumptions.lastBankDisbursementMonth);
                                                                 const constrEnd = getSafeValue(propertyData.assumptions.clpDurationYears) * 12;
                                                                 const possession = parseInt(propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.possessionMonths) || 0;
-
-                                                                // Logic matches calculateFinancials
                                                                 const base = propertyData.paymentPlan === 'clp'
                                                                     ? (explicitLast > 0 ? explicitLast : (constrEnd > 0 ? constrEnd : possession))
-                                                                    : possession; // RTM uses possession
-
+                                                                    : possession;
                                                                 return base + getSafeValue(propertyData.assumptions.homeLoanStartMonth) + 1;
                                                             })()
-                                                        )
-                                                }
+                                                    }
+                                                </div>
                                             </div>
-                                            <small className="text-muted text-center" style={{ fontSize: '0.65rem' }}>
-                                                {propertyData.assumptions.homeLoanStartMode === 'manual'
-                                                    ? "(User Defined)"
-                                                    : "(Last Demand + Delay + 1)"}
-                                            </small>
+
                                         </div>
                                     </div>
                                 </div>
                             )
                         )}
-                        {/* Personal Loan 1 Details (Accordion) */}
+
+                        {/* Personal Loan 1 Details (Keep existing logic, just ensure styling matches) */}
                         {renderAccordionSection(
-                            'pl1_details',
-                            'Personal Loan 1 Details',
-                            'bi-cash-coin',
+                            'pl1_details', 'Personal Loan 1 Details', 'bi-cash-coin',
                             (
                                 <div className="row g-3">
-                                    {/* Column 1: Share % */}
-                                    <div className="col-md-3">
-                                        <label className="form-label">Share of Total Cost (%)</label>
-                                        <input
-                                            type="number"
-                                            className="form-control"
+                                    <div className="col-6">
+                                        <label className="form-label small">Share (%)</label>
+                                        <input type="number" className="form-control form-control-sm"
                                             value={propertyData.assumptions.personalLoan1Share}
                                             onChange={(e) => handleAssumptionChange('personalLoan1Share', e.target.value)}
-                                            placeholder={placeholders.investmentPeriod}
                                             disabled={propertyData.paymentPlan !== 'custom'}
                                         />
-                                        {propertyData.paymentPlan !== 'custom' && (
-                                            <small className="text-muted">Set by payment plan</small>
-                                        )}
                                     </div>
-
-                                    {/* Column 2: Calculated Amount */}
-                                    <div className="col-md-3">
+                                    <div className="col-6">
                                         <label className="form-label">Amount</label>
                                         <div className="form-control bg-light border-light text-secondary">
                                             {formatCurrency(
@@ -1852,121 +1899,196 @@ const PropertyComparisonMobile = () => {
                                             )}
                                         </div>
                                     </div>
-
-                                    {/* Column 3: Interest Rate */}
-                                    <div className="col-md-3">
-                                        <label className="form-label">
-                                            Personal Loan Rate (%) <span className="text-danger fw-bold">*</span>
-                                        </label>
-                                        <div className="input-group">
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                className="form-control"
-                                                value={propertyData.assumptions.personalLoan1Rate}
-                                                placeholder='e.g. 10%'
-                                                onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
-                                            />
-                                            <span className="input-group-text bg-white text-muted">%</span>
-                                        </div>
+                                    <div className="col-6">
+                                        <label className="form-label small">Tenure (Yrs)</label>
+                                        <input type="number" className="form-control form-control-sm"
+                                            value={propertyData.assumptions.personalLoan1Term}
+                                            placeholder='e.g. 8'
+                                            onChange={(e) => handleAssumptionChange('personalLoan1Term', e.target.value)}
+                                        />
                                     </div>
-
-                                    {/* Column 4: Start Month Slider */}
-                                    <div className="col-md-3">
+                                    <div className="col-6">
+                                        <label className="form-label small">Rate (%)</label>
+                                        <input type="number" step="0.1" className="form-control form-control-sm"
+                                            value={propertyData.assumptions.personalLoan1Rate}
+                                            placeholder='e.g. 10'
+                                            onChange={(e) => handleAssumptionChange('personalLoan1Rate', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="col-12">
                                         <label className="form-label d-flex justify-content-between">
                                             <span>Start Month</span>
                                             <span className="fw-bold">Month {propertyData.assumptions.personalLoan1StartMonth}</span>
                                         </label>
-                                        <input
-                                            type="range"
-                                            className="form-range"
-                                            min="0"
-                                            max="84"
-                                            value={propertyData.assumptions.personalLoan1StartMonth}
-                                            onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
-                                        />
                                         <div className="d-flex justify-content-between">
                                             <small className="text-muted" style={{ fontSize: '0.7rem' }}>Month 0</small>
                                             <small className="text-muted" style={{ fontSize: '0.7rem' }}>Month 84</small>
+                                        </div>
+                                        <div className="position-relative mb-4">
+
+                                            {/* The Actual Input Slider */}
+                                            <input
+                                                type="range"
+                                                className="form-range"
+                                                min="0"
+                                                max="84"
+                                                step="1"
+                                                value={propertyData.assumptions.personalLoan1StartMonth}
+                                                onChange={(e) => handleAssumptionChange('personalLoan1StartMonth', e.target.value)}
+                                                style={{ position: 'relative', zIndex: 2 }}
+                                            />
+
+                                            {/* The Ticks & Labels Overlay */}
+                                            <div
+                                                className="position-absolute w-100 top-50 start-0 translate-middle-y pe-none"
+                                                style={{ height: '100%', zIndex: 1, paddingLeft: '8px', paddingRight: '8px' }}
+                                            >
+                                                {[10, 20, 30, 40, 50, 60, 70, 80].map((tickValue) => (
+                                                    <React.Fragment key={tickValue}>
+
+                                                        {/* 1. The Vertical Dash */}
+                                                        <div
+                                                            className="position-absolute bg-secondary opacity-25"
+                                                            style={{
+                                                                left: `${(tickValue / 84) * 100}%`,
+                                                                width: '2px',
+                                                                height: '10px', // Slightly shorter for cleaner look
+                                                                top: '50%',
+                                                                transform: 'translate(-50%, -50%)'
+                                                            }}
+                                                        ></div>
+
+                                                        {/* 2. The Number Label */}
+                                                        <div
+                                                            className="position-absolute text-muted opacity-75"
+                                                            style={{
+                                                                left: `${(tickValue / 84) * 100}%`,
+                                                                top: '20px', // Push below the slider
+                                                                transform: 'translateX(-50%)', // Center text exactly on the tick
+                                                                fontSize: '0.6rem',
+                                                                fontWeight: '600'
+                                                            }}
+                                                        >
+                                                            {tickValue}
+                                                        </div>
+
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
                                         </div>
                                         <small className="text-muted d-block text-end mt-1" style={{ fontSize: '0.65rem' }}>Independent of possession</small>
                                     </div>
                                 </div>
                             )
                         )}
-                        {/* Personal Loan 2 Details (Accordion) */}
+
+                        {/* Personal Loan 2 Details */}
                         {renderAccordionSection(
-                            'pl2_details',
-                            'Personal Loan 2 Details',
-                            'bi-cash-coin',
+                            'pl2_details', 'Personal Loan 2 Details', 'bi-cash-coin',
                             (
                                 <div className="row g-3">
-                                    {/* Column 1: Share % */}
-                                    <div className="col-md-3">
-                                        <label className="form-label">Share of Total Cost (%)</label>
-                                        <input
-                                            type="number"
-                                            className="form-control"
+                                    <div className="col-6">
+                                        <label className="form-label small">Share (%)</label>
+                                        <input type="number" className="form-control form-control-sm"
                                             value={propertyData.assumptions.personalLoan2Share}
                                             onChange={(e) => handleAssumptionChange('personalLoan2Share', e.target.value)}
-                                            placeholder={placeholders.investmentPeriod}
                                             disabled={propertyData.paymentPlan !== 'custom'}
                                         />
-                                        {propertyData.paymentPlan !== 'custom' && (
-                                            <small className="text-muted">Set by payment plan</small>
-                                        )}
                                     </div>
-
-                                    {/* Column 2: Calculated Amount */}
-                                    <div className="col-md-3">
+                                    <div className="col-6">
                                         <label className="form-label">Amount</label>
-                                        <div className="form-control bg-light border-light text-secondary">
+                                        <div className="form-control bg-light border-light text-secondary" style={{
+                                            // Apply standard Bootstrap disabled gray background if not custom
+                                            backgroundColor: propertyData.paymentPlan !== 'custom' ? '#e9ecefa6' : '#fff',
+                                            // Mute the text color slightly to match disabled state
+                                            color: propertyData.paymentPlan !== 'custom' ? '#6c757d' : 'inherit'
+                                        }}>
                                             {formatCurrency(
-                                                (propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.size || 0) * getSafeValue(propertyData.purchasePrice) * (getSafeValue(propertyData.assumptions.personalLoan2Share) / 100)
+                                                (propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.size || 0) * getSafeValue(propertyData.purchasePrice) * (getSafeValue(propertyData.assumptions.personalLoan1Share) / 100)
                                             )}
                                         </div>
                                     </div>
-
-                                    {/* Column 3: Interest Rate */}
-                                    <div className="col-md-3">
-                                        <label className="form-label">
-                                            Personal Loan Rate (%) <span className="text-danger fw-bold">*</span>
-                                        </label>
-                                        <div className="input-group">
-                                            <input
-                                                type="number"
-                                                step="0.1"
-                                                className="form-control"
-                                                value={propertyData.assumptions.personalLoan2Rate}
-                                                placeholder='e.g. 10%'
-                                                onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
-                                                disabled={propertyData.assumptions.personalLoan2Share === 0}
-                                            />
-                                            <span className="input-group-text bg-white text-muted">%</span>
-                                        </div>
-                                        {propertyData.assumptions.personalLoan2Share === 0 && (
-                                            <small className="text-muted">Not applicable (0% share)</small>
-                                        )}
-                                    </div>
-
-                                    {/* Column 4: Start Month Slider */}
-                                    <div className="col-md-3">
-                                        <label className="form-label d-flex justify-content-between">
-                                            <span>Start After <br></br>Possession</span>
-                                            <span className="fw-bold text-muted">Delay: {propertyData.assumptions.personalLoan2StartMonth} mo</span>
-                                        </label>
-                                        <input
-                                            type="range"
-                                            className="form-range"
-                                            min="0"
-                                            max="36"
-                                            value={propertyData.assumptions.personalLoan2StartMonth}
-                                            onChange={(e) => handleAssumptionChange('personalLoan2StartMonth', e.target.value)}
+                                    <div className="col-6">
+                                        <label className="form-label small">Tenure (Yrs)</label>
+                                        <input type="number" className="form-control form-control-sm"
+                                            value={propertyData.assumptions.personalLoan2Term}
+                                            onChange={(e) => handleAssumptionChange('personalLoan2Term', e.target.value)}
+                                            placeholder='e.g. 8'
                                             disabled={propertyData.assumptions.personalLoan2Share === 0}
                                         />
+                                    </div>
+                                    <div className="col-6">
+                                        <label className="form-label small">Rate (%)</label>
+                                        <input type="number" step="0.1" className="form-control form-control-sm"
+                                            value={propertyData.assumptions.personalLoan2Rate}
+                                            onChange={(e) => handleAssumptionChange('personalLoan2Rate', e.target.value)}
+                                            placeholder='e.g. 10'
+                                            disabled={propertyData.assumptions.personalLoan2Share === 0}
+                                        />
+                                    </div>
+                                    <div className="col-md-6">
+                                        <label className="form-label d-flex justify-content-between small">
+                                            <span>Start Month (After Possession)</span>
+                                            <span className="fw-bold">Month {propertyData.assumptions.personalLoan2StartMonth}</span>
+                                        </label>
                                         <div className="d-flex justify-content-between">
-                                            <small className="text-muted" style={{ fontSize: '0.7rem' }}>+0 mo</small>
-                                            <small className="text-muted" style={{ fontSize: '0.7rem' }}>+36 mo</small>
+                                            <small className="text-muted" style={{ fontSize: '0.65rem' }}>+0 mo</small>
+                                            <small className="text-muted" style={{ fontSize: '0.65rem' }}>+36 mo</small>
+                                        </div>
+
+                                        {/* Slider Wrapper */}
+                                        {/* ✅ Increased margin-bottom (mb-4) to make room for labels */}
+                                        <div className="position-relative mb-4">
+
+                                            {/* The Actual Input Slider */}
+                                            <input
+                                                type="range"
+                                                className="form-range"
+                                                min="0"
+                                                max="36"
+                                                step="1"
+                                                value={propertyData.assumptions.personalLoan2StartMonth}
+                                                onChange={(e) => handleAssumptionChange('personalLoan2StartMonth', e.target.value)}
+                                                style={{ position: 'relative', zIndex: 2 }}
+                                            />
+
+                                            {/* The Ticks & Labels Overlay */}
+                                            <div
+                                                className="position-absolute w-100 top-50 start-0 translate-middle-y pe-none"
+                                                style={{ height: '100%', zIndex: 1, paddingLeft: '8px', paddingRight: '8px' }}
+                                            >
+                                                {[4, 8, 12, 16, 20, 24, 28, 32].map((tickValue) => (
+                                                    <React.Fragment key={tickValue}>
+
+                                                        {/* 1. The Vertical Dash */}
+                                                        <div
+                                                            className="position-absolute bg-secondary opacity-25"
+                                                            style={{
+                                                                left: `${(tickValue / 36) * 100}%`,
+                                                                width: '2px',
+                                                                height: '10px', // Slightly shorter for cleaner look
+                                                                top: '50%',
+                                                                transform: 'translate(-50%, -50%)'
+                                                            }}
+                                                        ></div>
+
+                                                        {/* 2. The Number Label */}
+                                                        <div
+                                                            className="position-absolute text-muted opacity-75"
+                                                            style={{
+                                                                left: `${(tickValue / 36) * 100}%`,
+                                                                top: '20px', // Push below the slider
+                                                                transform: 'translateX(-50%)', // Center text exactly on the tick
+                                                                fontSize: '0.6rem',
+                                                                fontWeight: '600'
+                                                            }}
+                                                        >
+                                                            {tickValue}
+                                                        </div>
+
+                                                    </React.Fragment>
+                                                ))}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -2701,7 +2823,7 @@ const PropertyComparisonMobile = () => {
 
                 {/* 2. Monthly EMI Timeline */}
                 <div className="mb-4">
-                    <h6 className="fw-bold text-secondary mb-3 ps-2 border-start">
+                    <h6 className="fw-bold text-primary mb-3 ps-2 border-start border-4 border-primary">
                         EMI Timeline
                     </h6>
 
@@ -2796,38 +2918,247 @@ const PropertyComparisonMobile = () => {
 
         return (
             <div className="mobile-bottom-nav">
-                    <div className="d-flex justify-content-around align-items-center py-3 px-2">
-                        {navItems.map((item) => {
-                            const isActive = activeTab === item.id;
+                <div className="d-flex justify-content-around align-items-center py-3 px-2">
+                    {navItems.map((item) => {
+                        const isActive = activeTab === item.id;
 
-                            return (
+                        return (
+                            <div
+                                key={item.id}
+                                onClick={() => setActiveTab(item.id)}
+                                role="button"
+                                className={`nav-pill-item ${isActive ? 'active' : ''}`}
+                            >
+                                {/* Icon */}
+                                <i className={`bi ${item.icon} fs-5`}></i>
+
+                                {/* Label (Visible only when active) */}
                                 <div
-                                    key={item.id}
-                                    onClick={() => setActiveTab(item.id)}
-                                    role="button"
-                                    className={`nav-pill-item ${isActive ? 'active' : ''}`}
+                                    style={{
+                                        maxWidth: isActive ? '100px' : '0', // Animate width
+                                        opacity: isActive ? 1 : 0,           // Animate opacity
+                                        overflow: 'hidden',
+                                        whiteSpace: 'nowrap',
+                                        transition: 'all 0.3s ease-out',
+                                        marginLeft: isActive ? '8px' : '0'
+                                    }}
                                 >
-                                    {/* Icon */}
-                                    <i className={`bi ${item.icon} fs-5`}></i>
-
-                                    {/* Label (Visible only when active) */}
-                                    <div
-                                        style={{
-                                            maxWidth: isActive ? '100px' : '0', // Animate width
-                                            opacity: isActive ? 1 : 0,           // Animate opacity
-                                            overflow: 'hidden',
-                                            whiteSpace: 'nowrap',
-                                            transition: 'all 0.3s ease-out',
-                                            marginLeft: isActive ? '8px' : '0'
-                                        }}
-                                    >
-                                        <span className="fw-bold small">{item.label}</span>
-                                    </div>
+                                    <span className="fw-bold small">{item.label}</span>
                                 </div>
-                            );
-                        })}
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
+        );
+    };
+    const renderPreviewModal = () => {
+        if (!showPreview) return null;
+
+        const { assumptions, purchasePrice, otherCharges, stampDuty, gstPercentage, paymentPlan, properties } = propertyData;
+        const selectedProp = properties.find(p => p.id === userSelections.selectedPropertyId) || properties[0];
+
+        // 1. Navigation Helper: Closes modal -> Goes to specific step
+        const handleEditStep = (stepNumber) => {
+            setShowPreview(false);
+            setCurrentStep(stepNumber);
+        };
+
+        // 2. UI Helper: Consistent Row for Data
+        const PreviewRow = ({ label, value }) => (
+            <div className="d-flex justify-content-between align-items-center mb-2">
+                <span className="text-muted small">{label}</span>
+                <span className="fw-bold small">{value || '-'}</span>
+            </div>
+        );
+
+        // 3. UI Helper: Header with Edit Pencil
+        const SectionHeader = ({ title, icon, targetStep }) => (
+            <div className="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary border-opacity-10 pb-2">
+                <h6 className="fw-bold gradient-text opacity-75 small mb-0 text-uppercase">
+                    <i className={`bi ${icon} me-2`}></i>{title}
+                </h6>
+                <button
+                    className="btn btn-sm btn-link text-decoration-none p-0 text-secondary opacity-75 hover-opacity-100"
+                    onClick={() => handleEditStep(targetStep)}
+                    title={`Edit ${title}`}
+                >
+                    <i className="bi bi-pencil-square fs-6"></i>
+                </button>
+            </div>
+        );
+
+        return (
+            <>
+                {/* Backdrop */}
+                <div
+                    className="position-fixed top-0 start-0 w-100 h-100 bg-dark"
+                    style={{ zIndex: 3000, opacity: 0.7, backdropFilter: 'blur(4px)' }}
+                    onClick={() => setShowPreview(false)}
+                ></div>
+
+                {/* Modal Content */}
+                <div
+                    className="position-fixed top-50 start-50 translate-middle w-100"
+                    style={{ maxWidth: '900px', zIndex: 3010, maxHeight: '95vh', overflowY: 'auto' }}
+                >
+                    <div className="glass-card p-0 m-3 shadow-lg">
+
+                        {/* Header */}
+                        <div className="p-4 border-bottom border-secondary border-opacity-10 d-flex justify-content-between align-items-center">
+                            <div>
+                                <h4 className="fw-bold gradient-text mb-1">
+                                    <i className="bi bi-clipboard-check me-2"></i>Review Inputs
+                                </h4>
+                                <p className="mb-0 text-muted small">Verify parameters before analysis</p>
+                            </div>
+                            <button
+                                onClick={() => setShowPreview(false)}
+                                className="btn btn-sm btn-outline-secondary rounded-circle"
+                                style={{ width: '32px', height: '32px', padding: 0 }}
+                            >
+                                <i className="bi bi-x-lg "></i>
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-4">
+
+                            {/* --- ROW 1: STEP 1 (Property & Costs) --- */}
+                            <div className="row g-4 mb-4">
+                                <div className="col-md-6">
+                                    <div className="p-3 rounded bg-light bg-opacity-10 border border-secondary border-opacity-10 h-100">
+                                        <SectionHeader title="Property Details" icon="bi-building" targetStep={1} />
+
+                                        <PreviewRow label="Name" value={selectedProp?.name} />
+                                        <PreviewRow label="Location" value={selectedProp?.location} />
+                                        <PreviewRow label="Size" value={`${selectedProp?.size} sq.ft`} />
+                                        <PreviewRow label="Possession" value={`${selectedProp?.possessionMonths} Months`} />
+                                    </div>
+                                </div>
+                                <div className="col-md-6">
+                                    <div className="p-3 rounded bg-light bg-opacity-10 border border-secondary border-opacity-10 h-100">
+                                        <SectionHeader title="Cost Breakdown" icon="bi-tag" targetStep={1} />
+
+                                        <PreviewRow label="Purchase Price" value={`${formatCurrency(purchasePrice)}/sq.ft`} />
+                                        <PreviewRow label="Other Charges" value={formatCurrency(otherCharges)} />
+                                        <PreviewRow label="Stamp Duty" value={`${stampDuty}%`} />
+                                        <PreviewRow label="GST" value={`${gstPercentage}%`} />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* --- ROW 2: STEP 2 (Payment Plan) --- */}
+                            <div className="mb-4">
+                                <SectionHeader title="Payment Plan & Timeline" icon="bi-credit-card" targetStep={2} />
+
+                                <div className="row g-3">
+                                    <div className="col-md-4">
+                                        <div className="mb-2"><span className="text-muted small d-block">Plan Type</span><span className="fw-bold">{paymentPlan.toUpperCase()}</span></div>
+                                    </div>
+                                    <div className="col-md-4">
+                                        <div className="mb-2"><span className="text-muted small d-block">Investment Period</span><span className="fw-bold">{assumptions.investmentPeriod} {assumptions.holdingPeriodUnit || 'Years'}</span></div>
+                                    </div>
+                                    {paymentPlan === 'clp' && (
+                                        <div className="col-md-4">
+                                            <div className="mb-2"><span className="text-muted small d-block">Construction</span><span className="fw-bold">{assumptions.clpDurationYears} Yrs</span></div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* --- ROW 3: STEP 3 (Funding Mix) --- */}
+                            <div className="mb-4">
+                                <SectionHeader title="Funding Mix & Loans" icon="bi-bank" targetStep={3} />
+
+                                <div className="table-responsive rounded border border-secondary border-opacity-10">
+                                    <table className="table table-hover table-borderless table-sm mb-0 small bg-transparent">
+                                        <thead className="bg-light bg-opacity-10 border-bottom border-secondary border-opacity-10">
+                                            <tr>
+                                                <th className="fw-bold ps-3 gradient-text">Source</th>
+                                                <th className="fw-bold text-end gradient-text">Share</th>
+                                                <th className="fw-bold text-end gradient-text">Rate</th>
+                                                <th className="fw-bold text-end gradient-text">Tenure</th>
+                                                <th className="fw-bold text-end gradient-text pe-3">Start</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td className="ps-3">Down Payment</td>
+                                                <td className="text-end">{assumptions.downPaymentShare}%</td>
+                                                <td className="text-end text-muted">-</td>
+                                                <td className="text-end text-muted">-</td>
+                                                <td className="text-end pe-3">Month 0</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="ps-3 fw-bold text-primary">Home Loan</td>
+                                                <td className="text-end">{assumptions.homeLoanShare}%</td>
+                                                <td className="text-end">{assumptions.homeLoanRate}%</td>
+                                                <td className="text-end">{assumptions.homeLoanTerm} Yr</td>
+                                                <td className="text-end pe-3">
+                                                    {assumptions.homeLoanStartMode === 'manual'
+                                                        ? `Month ${assumptions.homeLoanStartMonth}`
+                                                        : `Auto (+${assumptions.homeLoanStartMonth}mo)`}
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td className="ps-3">Personal Loan 1</td>
+                                                <td className="text-end">{assumptions.personalLoan1Share}%</td>
+                                                <td className="text-end">{assumptions.personalLoan1Rate}%</td>
+                                                <td className="text-end">{assumptions.personalLoan1Term} Yr</td>
+                                                <td className="text-end pe-3">Month {assumptions.personalLoan1StartMonth}</td>
+                                            </tr>
+                                            <tr>
+                                                <td className="ps-3">Personal Loan 2</td>
+                                                <td className="text-end">{assumptions.personalLoan2Share}%</td>
+                                                <td className="text-end">{assumptions.personalLoan2Rate}%</td>
+                                                <td className="text-end">{assumptions.personalLoan2Term} Yr</td>
+                                                <td className="text-end pe-3">Possession +{assumptions.personalLoan2StartMonth}</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* --- ROW 4: STEP 4 (Exit Scenarios) --- */}
+                            <div className="mb-2">
+                                <SectionHeader title="Exit Price Scenarios" icon="bi-graph-up-arrow" targetStep={4} />
+
+                                <div className="d-flex flex-wrap gap-2">
+                                    <div className="px-3 py-2 rounded border border-primary bg-primary bg-opacity-10">
+                                        <span className="d-block small text-primary mb-1 fw-bold">Selected</span>
+                                        <span className="fw-bold">{formatCurrency(userSelections.selectedExitPrice)}</span>
+                                    </div>
+                                    {userSelections.scenarioExitPrices.map((price, idx) => (
+                                        <div key={idx} className="px-3 py-2 rounded border border-secondary border-opacity-25 bg-light bg-opacity-10">
+                                            <span className="d-block small text-muted mb-1">Scenario {idx + 1}</span>
+                                            <span className="fw-bold">{formatCurrency(price)}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                        </div>
+
+                        {/* Footer Actions */}
+                        <div className="p-3 border-top border-secondary border-opacity-10 bg-light bg-opacity-10 d-flex justify-content-end gap-2">
+                            <button
+                                className="btn btn-outline-secondary px-4 rounded-pill"
+                                onClick={() => setShowPreview(false)}
+                            >
+                                Close
+                            </button>
+                            <button
+                                className="btn btn-primary px-4 rounded-pill shadow-sm"
+                                onClick={() => setShowPreview(false)}
+                            >
+                                <i className="bi bi-check-lg me-2"></i>Confirm Details
+                            </button>
+                        </div>
+
+                    </div>
+                </div>
+            </>
         );
     };
 
@@ -2852,6 +3183,7 @@ const PropertyComparisonMobile = () => {
                     <div>{loadingMessage || 'Processing...'}</div>
                 </div>
             )}
+            {renderPreviewModal()}
         </div>
     );
 };

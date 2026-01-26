@@ -309,6 +309,7 @@ const PropertyComparisonDesktop = () => {
     const location = useLocation();
     // Add this with your other state variables
     const [showExitLogic, setShowExitLogic] = useState(false);
+    const [showLanding, setShowLanding] = useState(true);
     // ... existing state definitions ...
     const [activeTab, setActiveTab] = useState(location.state?.returnTab || 'inputs');
     const navigate = useNavigate();
@@ -2970,7 +2971,7 @@ const PropertyComparisonDesktop = () => {
                             price={formatCurrency(manualTotalPaid)}
                             subtitle={`Pay +${formatCurrency(manualTotalPaid - standardTotalPaid)} more upfront`}
                             balance={formatLakhs(hlAmount - profit)}
-                            balanceLabel={`Reduced by ${formatLakhs(profit)}`}
+                            balanceLabel={`Prinipal reduced by ${formatLakhs(profit)}`}
                             isRecommended={true}
                             features={[
                                 { icon: "bi-exclamation-triangle-fill text-danger", text: "High initial monthly commitment" },
@@ -3452,7 +3453,7 @@ const PropertyComparisonDesktop = () => {
 
                     {/* Header */}
                     <div className="card-body border-bottom">
-                        <div className="row align-items-center">
+                        <div className="row align-items-center ">
                             <div className="col-md-8">
                                 <h2 className="fw-bold mb-2 gradient-text">
                                     <i className="bi bi-calculator me-3"></i>
@@ -3688,7 +3689,7 @@ const PropertyComparisonDesktop = () => {
                                             {breakdown.hasIDC && (
                                                 <div className="mt-2 small">
                                                     <i className="bi bi-info-circle me-1"></i>
-                                                    Includes Monthly IDC ({formatCurrency(breakdown.monthlyIDCEMI)})
+                                                    Includes Average IDC ({formatCurrency(breakdown.monthlyIDCEMI)})
                                                 </div>
                                             )}
                                         </div>
@@ -4481,16 +4482,22 @@ const PropertyComparisonDesktop = () => {
             </div>
         );
     };
+    // --- SCROLL HANDLER ---
+    const scrollToTabs = () => {
+        if (navRef.current) {
+            // Scroll smoothly to the navigation bar
+            navRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    };
 
     return (
         <div className="property-comparison">
 
             {/* Background Blobs */}
-            <div className="position-fixed top-0 left-0 w-100 h-100" style={{ zIndex: -1 }}>
+            <div className="position-fixed top-0 left-0 w-100 h-100" style={{ zIndex: 0 }}>
                 <div className="position-absolute top-0 start-0 w-100 h-100" style={{ background: 'radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.15) 0%, transparent 50%)' }}></div>
                 <div className="position-absolute top-0 end-0 w-100 h-100" style={{ background: 'radial-gradient(circle at 80% 20%, rgba(118, 75, 162, 0.15) 0%, transparent 50%)' }}></div>
             </div>
-
             <div className="container-fluid py-4">
                 <div className="row justify-content-center">
                     <div className="col-12 col-xxl-10">

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  createUserWithEmailAndPassword, 
+import {
+  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  sendEmailVerification,  
-  sendPasswordResetEmail  
+  sendEmailVerification,
+  sendPasswordResetEmail
 } from 'firebase/auth';
 import { auth } from '../firebase';
 
@@ -11,13 +11,13 @@ function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   // 1. NEW STATE: Tracks if password is visible
-  const [showPassword, setShowPassword] = useState(false); 
-  
+  const [showPassword, setShowPassword] = useState(false);
+
   const [isLogin, setIsLogin] = useState(true);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false); 
-  const [successMessage, setSuccessMessage] = useState(''); 
+  const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -31,7 +31,7 @@ function Auth() {
         // Sign in
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        
+
         if (!user.emailVerified) {
           setError('Please verify your email before signing in. Check your inbox for the verification link.');
         } else {
@@ -44,14 +44,14 @@ function Auth() {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         await sendEmailVerification(user);
-        
+
         console.log('User created successfully');
         setSuccessMessage('Account created! Please check your email to verify your account.');
         setShowSuccess(true);
       }
     } catch (error) {
       console.error('Authentication error:', error);
-      
+
       let customMessage = "An error occurred. Please try again.";
       switch (error.code) {
         case 'auth/invalid-credential':
@@ -72,7 +72,7 @@ function Auth() {
           customMessage = "Too many failed attempts. Please try again later or reset your password.";
           break;
         default:
-          customMessage = error.message; 
+          customMessage = error.message;
       }
       setError(customMessage);
     } finally {
@@ -88,7 +88,7 @@ function Auth() {
 
     setLoading(true);
     setError('');
-    
+
     try {
       await sendPasswordResetEmail(auth, email);
       setSuccessMessage(`Password reset email sent to ${email}. Check your inbox!`);
@@ -121,19 +121,32 @@ function Auth() {
       <div className="card shadow">
         <div className="card-body p-4">
           <div className="text-center mb-4">
-            <div className="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 rounded-circle p-3 mb-3" style={{ width: '70px', height: '70px' }}>
-              <i className="fas fa-chart-line fa-2x text-primary"></i>
+            <div
+              className="d-inline-flex align-items-center justify-content-center bg-primary bg-opacity-10 rounded-circle mb-3"
+              style={{ width: '80px', height: '80px', padding: '15px' }} // Adjusted padding for better fit
+            >
+              {/* ✅ REPLACED ICON WITH IMAGE */}
+              <img
+                src="logo_124.png"
+                alt="App Logo"
+                className="img-fluid"
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'contain' // Ensures logo doesn't stretch
+                }}
+              />
             </div>
             <h4 className="fw-bold">Access Property Tools</h4>
             <p className="text-muted small">
-              {isLogin 
-                ? "Welcome back! Please sign in to continue." 
+              {isLogin
+                ? "Welcome back! Please sign in to continue."
                 : "Create an account to save your investment scenarios."}
             </p>
           </div>
-          
+
           <h4 className="text-center mb-4 fw-bold">
-            <i className={`fas ${isLogin ? 'fa-sign-in-alt' : 'fa-user-plus'} me-2 text-primary`}></i>
+            <i className={`me-2 text-primary`}></i>
             {isLogin ? 'Sign In to Your Account' : 'Create New Account'}
           </h4>
 
@@ -148,10 +161,10 @@ function Auth() {
             <div className="alert alert-danger alert-dismissible fade show" role="alert">
               {error}
               <button type="button" className="btn-close" onClick={() => setError('')}></button>
-              
+
               {error.includes('verify your email') && auth.currentUser && (
                 <div className="mt-2">
-                  <button 
+                  <button
                     onClick={handleResendVerification}
                     className="btn btn-sm btn-outline-danger"
                     disabled={loading}
@@ -184,7 +197,7 @@ function Auth() {
               <label htmlFor="password" className="form-label">
                 <i className="fas fa-lock me-2"></i>Password
               </label>
-              
+
               {/* 2. UPDATED PASSWORD INPUT BLOCK */}
               <div className="position-relative">
                 <input
@@ -212,10 +225,10 @@ function Auth() {
               <div className="form-text">
                 Password must be at least 6 characters long
               </div>
-              
+
               {isLogin && (
                 <div className="mt-2 text-end">
-                  <button 
+                  <button
                     type="button"
                     onClick={handleForgotPassword}
                     className="btn btn-link btn-sm text-decoration-none p-0"
@@ -227,8 +240,8 @@ function Auth() {
               )}
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="btn btn-primary w-100 py-2"
               disabled={loading}
             >
@@ -250,14 +263,14 @@ function Auth() {
             <div className="mt-3 alert alert-info">
               <i className="fas fa-info-circle me-2"></i>
               <small>
-                After signing up, you'll receive a verification email. 
+                After signing up, you'll receive a verification email.
                 You must verify your email before signing in.
               </small>
             </div>
           )}
 
           <div className="text-center mt-4">
-            <button 
+            <button
               onClick={() => {
                 setIsLogin(!isLogin);
                 setError('');
