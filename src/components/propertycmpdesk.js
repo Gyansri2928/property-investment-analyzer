@@ -1024,7 +1024,10 @@ const PropertyComparisonDesktop = () => {
                 exitPrice: price,
                 saleValue: breakdown.saleValue,
                 netProfit: breakdown.netGainLoss,
-                roi: breakdown.totalCashInvested > 0 ? (breakdown.netGainLoss / breakdown.totalCashInvested) * 100 : 0,
+
+                // ✅ FIX: Use the calculated ROI from the breakdown object
+                roi: breakdown.roi,
+
                 appreciation: ((price - propertyData.purchasePrice) / propertyData.purchasePrice) * 100,
                 cashInvested: breakdown.totalCashInvested,
                 loanOutstanding: breakdown.totalLoanOutstanding

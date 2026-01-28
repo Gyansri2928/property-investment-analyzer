@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Property Analyzer</string>
-    <string name="title_activity_main">Property Analyzer</string>
-    <string name="package_name">com.agenthum.propertyanalyzer</string>
-    <string name="custom_url_scheme">com.agenthum.propertyanalyzer</string>
-</resources>
