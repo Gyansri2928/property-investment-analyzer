@@ -3,46 +3,49 @@
    ========================================= */
 :root {
     /* ✅ MATCHED FROM APP.CSS: Steel Blue -> Midnight Blue Gradient */
-    --main-bg-gradient: linear-gradient(135deg,#2c3e50bd 0%, #4a6fa5 100% );
-    
+    --main-bg-gradient: linear-gradient(135deg, #2c3e50bd 0%, #4a6fa5 100%);
+
     /* ✅ CONSTANT HIGHLIGHT COLOR: The "Steel Blue" from your App Header */
-    --brand-color: #4a6fa5; 
+    --brand-color: #4a6fa5;
 
     /* Inputs */
-    --input-bg: #FFFFFF; 
-    
+    --input-bg: #FFFFFF;
+
     /* Text Colors */
-    --text-primary: #1e293b;   /* Slate-900 */
-    --text-secondary: #64748b; /* Slate-500 */
-    --border-color: #e2e8f0;   /* Slate-200 */
+    --text-primary: #1e293b;
+    /* Slate-900 */
+    --text-secondary: #64748b;
+    /* Slate-500 */
+    --border-color: #e2e8f0;
+    /* Slate-200 */
 
     /* LIGHT MODE GLASS SETTINGS */
     --glass-bg: rgba(255, 255, 255, 0.70);
-    
+
     /* Border: Subtle Steel Blue tint */
-    --glass-border: rgba(74, 111, 165, 0.3); 
-    
+    --glass-border: rgba(74, 111, 165, 0.3);
+
     /* Shadow: Midnight Blue tint */
     --glass-shadow: 0 8px 32px 0 rgba(44, 62, 80, 0.15);
 }
 
 [data-theme='dark'] {
     /* 🌑 Base Background: Deep Midnight Blue (Almost Black) */
-    --main-bg-gradient: #020617; 
-    
+    --main-bg-gradient: #020617;
+
     /* 🔵 Brand Color: Electric Blue */
     --brand-color: #3b82f6;
 
     /* Inputs: Dark Blue-Grey */
     --input-bg: rgba(15, 23, 42, 0.8);
-    
+
     /* Text: High Contrast White & Muted Blue-Grey */
     --text-primary: #f8fafc;
     --text-secondary: #94a3b8;
     --border-color: rgba(255, 255, 255, 0.08);
 
     /* 🪟 Glass: Darker, cleaner glass for high contrast */
-    --glass-bg: rgba(15, 23, 42, 0.6); 
+    --glass-bg: rgba(15, 23, 42, 0.6);
     --glass-border: rgba(255, 255, 255, 0.08);
     --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
 }
@@ -67,27 +70,34 @@
 /* --- NEW: BACKGROUND HANDLER (Light Mode Gradient vs Dark Mode Blobs) --- */
 
 .page-background-handler {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  z-index: 0;
-  pointer-events: none;
-  transition: background 0.3s ease;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    transition: background 0.3s ease;
 }
 
 /* ☀️ LIGHT MODE: The "Clean White" Gradient 
    Passes the "White Background" requirement but adds professional depth. */
 body:not(.dark-theme) .page-background-handler {
-  background: linear-gradient(135deg, #F6F8FD 0%, #E1E6F9 100%);
+    background: linear-gradient(135deg, #F6F8FD 0%, #E1E6F9 100%);
 }
 
 /* 🌙 DARK MODE: Restore your Cool Blobs */
 body.dark-theme {
     /* The Royal Gradient: Deep Black to Midnight Blue */
-    background: linear-gradient(to bottom, #020617 0%, #0f172a 100%) !important;
-    
+    background: linear-gradient(to bottom,
+            #020617 0%,
+            /* Deepest Black/Navy at Top */
+            #0F172A 40%,
+            /* Dark Slate Transition */
+            #1E293B 100%
+            /* Lighter Slate at Bottom */
+        );
+
     /* Lock it so it covers the whole screen */
     min-height: 100vh;
     background-attachment: fixed;
@@ -96,32 +106,34 @@ body.dark-theme {
 
 /* Dark Mode Blob 1 (Left) */
 body.dark-theme .page-background-handler::before {
-  content: '';
-  position: absolute;
-  top: -10%;
-  left: -10%;
-  width: 70%;
-  height: 70%;
-  /* This creates the "Cyber" glow effect */
-  background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 60%);
-  z-index: -1;
+    content: '';
+    position: absolute;
+    top: -10%;
+    left: -10%;
+    width: 70%;
+    height: 70%;
+    /* This creates the "Cyber" glow effect */
+    background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 60%);
+    z-index: -1;
 }
 
 /* Dark Mode Blob 2 (Right) */
 body.dark-theme .page-background-handler::after {
-  content: '';
-  position: absolute;
-  bottom: -10%;
-  right: -10%;
-  width: 70%;
-  height: 70%;
-  background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 60%);
-  z-index: -1;
+    content: '';
+    position: absolute;
+    bottom: -10%;
+    right: -10%;
+    width: 70%;
+    height: 70%;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.1) 0%, transparent 60%);
+    z-index: -1;
 }
+
 /* Dark Mode Background Override */
 /* Find this block and replace it */
 .dark-theme .property-comparison {
-    background: transparent !important; /* Let the body gradient shine */
+    background: transparent !important;
+    /* Let the body gradient shine */
     box-shadow: none;
     border: none;
 }
@@ -141,7 +153,7 @@ body.dark-theme .page-background-handler::after {
     backdrop-filter: blur(16px);
     -webkit-backdrop-filter: blur(16px);
     border-radius: 20px;
-    border: 1px solid var(--glass-border); 
+    border: 1px solid var(--glass-border);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.24);
 
     /* Spacing */
@@ -191,6 +203,7 @@ body.dark-theme .page-background-handler::after {
     margin-top: 0.25rem;
     display: block;
 }
+
 /* =========================================
    5. COMPONENT STYLING
    ========================================= */
@@ -567,6 +580,7 @@ body.dark-theme .page-background-handler::after {
         print-color-adjust: exact;
     }
 }
+
 /* =========================================
    11. IDC POPUP STYLES (CLICK VERSION)
    ========================================= */
@@ -574,22 +588,24 @@ body.dark-theme .page-background-handler::after {
 .idc-breakdown-popup {
     /* Position */
     position: absolute;
-    bottom: 115%; /* Pushes it UP above the button */
+    bottom: 115%;
+    /* Pushes it UP above the button */
     left: 50%;
     transform: translateX(-50%);
-    
+
     /* Size & Shape */
     width: 320px;
-    max-width: 85vw; /* Mobile friendly */
+    max-width: 85vw;
+    /* Mobile friendly */
     background: #1e1e24;
     border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 12px;
-    
+
     /* Visuals */
-    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
     z-index: 1000;
     overflow: hidden;
-    
+
     /* Animation */
     animation: popUp 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
@@ -598,7 +614,8 @@ body.dark-theme .page-background-handler::after {
 .idc-breakdown-popup::after {
     content: "";
     position: absolute;
-    top: 100%; /* At the bottom of the popup */
+    top: 100%;
+    /* At the bottom of the popup */
     left: 50%;
     margin-left: -8px;
     border-width: 8px;
@@ -607,8 +624,15 @@ body.dark-theme .page-background-handler::after {
 }
 
 @keyframes popUp {
-    from { opacity: 0; transform: translate(-50%, 10px); }
-    to { opacity: 1; transform: translate(-50%, 0); }
+    from {
+        opacity: 0;
+        transform: translate(-50%, 10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
 }
 
 /* Popup Header */
@@ -634,26 +658,28 @@ body.dark-theme .page-background-handler::after {
     border-collapse: collapse;
 }
 
-.idc-mini-table th { 
-    position: sticky; 
-    top: 0; 
-    background: #2b2b35; 
-    padding: 8px; 
+.idc-mini-table th {
+    position: sticky;
+    top: 0;
+    background: #2b2b35;
+    padding: 8px;
     font-size: 0.75rem;
     color: #aaa;
     text-transform: uppercase;
 }
 
-.idc-mini-table td { 
-    padding: 8px; 
-    border-bottom: 1px solid rgba(255,255,255,0.05); 
+.idc-mini-table td {
+    padding: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
+
 /* =========================================
    HOVER EXPAND BUTTON (Icon -> Text)
    ========================================= */
 .hover-expand-btn {
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    min-width: 60px; /* Size of the circle/icon only */
+    min-width: 60px;
+    /* Size of the circle/icon only */
     border-radius: 50px;
 }
 
@@ -662,60 +688,78 @@ body.dark-theme .page-background-handler::after {
     max-width: 0;
     opacity: 0;
     overflow: hidden;
-    white-space: nowrap; /* Prevents text from wrapping while expanding */
+    white-space: nowrap;
+    /* Prevents text from wrapping while expanding */
     transition: all 0.4s ease;
 }
 
 /* Hover State: Reveal Text */
 .hover-expand-btn:hover {
     padding-left: 25px;
-    padding-right: 35px; /* Add space on the right */
+    padding-right: 35px;
+    /* Add space on the right */
 }
 
 .hover-expand-btn:hover .expandable-text {
-    max-width: 300px; /* Arbitrary large number to allow content to fit */
+    max-width: 300px;
+    /* Arbitrary large number to allow content to fit */
     opacity: 1;
-    margin-left: 15px; /* Push text away from icon */
+    margin-left: 15px;
+    /* Push text away from icon */
 }
+
 /* =========================================
    Glow Effect for Summary Cards
    ========================================= */
 
 /* 1. Total Interest Cost (Yellow/Orange Glow) */
 .border-warning {
-  box-shadow: 0 0 15px rgba(255, 193, 7, 0.6), 0 0 30px rgba(255, 193, 7, 0.4);
-  transition: box-shadow 0.3s ease-in-out;
+    box-shadow: 0 0 15px rgba(255, 193, 7, 0.6), 0 0 30px rgba(255, 193, 7, 0.4);
+    transition: box-shadow 0.3s ease-in-out;
 }
 
 /* 2. Min Monthly Pay (Green Glow) */
 .border-success {
-  box-shadow: 0 0 15px rgba(25, 135, 84, 0.6), 0 0 30px rgba(25, 135, 84, 0.4);
-  transition: box-shadow 0.3s ease-in-out;
+    box-shadow: 0 0 15px rgba(25, 135, 84, 0.6), 0 0 30px rgba(25, 135, 84, 0.4);
+    transition: box-shadow 0.3s ease-in-out;
 }
 
 /* 3. Max Monthly Pay (Red Glow) */
 .border-danger {
-  box-shadow: 0 0 15px rgba(220, 53, 69, 0.6), 0 0 30px rgba(220, 53, 69, 0.4);
-  transition: box-shadow 0.3s ease-in-out;
+    box-shadow: 0 0 15px rgba(220, 53, 69, 0.6), 0 0 30px rgba(220, 53, 69, 0.4);
+    transition: box-shadow 0.3s ease-in-out;
 }
 
 /* 4. Fixed PL1 EMI (Cyan/Blue Glow) */
 .border-info {
-  box-shadow: 0 0 15px rgba(13, 202, 240, 0.6), 0 0 30px rgba(13, 202, 240, 0.4);
-  transition: box-shadow 0.3s ease-in-out;
+    box-shadow: 0 0 15px rgba(13, 202, 240, 0.6), 0 0 30px rgba(13, 202, 240, 0.4);
+    transition: box-shadow 0.3s ease-in-out;
 }
 
 /* Optional: Add a stronger glow on hover for interactivity */
-.border-warning:hover { box-shadow: 0 0 20px rgba(255, 193, 7, 0.8), 0 0 40px rgba(255, 193, 7, 0.6); }
-.border-success:hover { box-shadow: 0 0 20px rgba(25, 135, 84, 0.8), 0 0 40px rgba(25, 135, 84, 0.6); }
-.border-danger:hover { box-shadow: 0 0 20px rgba(220, 53, 69, 0.8), 0 0 40px rgba(220, 53, 69, 0.6); }
-.border-info:hover { box-shadow: 0 0 20px rgba(13, 202, 240, 0.8), 0 0 40px rgba(13, 202, 240, 0.6); }
+.border-warning:hover {
+    box-shadow: 0 0 20px rgba(255, 193, 7, 0.8), 0 0 40px rgba(255, 193, 7, 0.6);
+}
+
+.border-success:hover {
+    box-shadow: 0 0 20px rgba(25, 135, 84, 0.8), 0 0 40px rgba(25, 135, 84, 0.6);
+}
+
+.border-danger:hover {
+    box-shadow: 0 0 20px rgba(220, 53, 69, 0.8), 0 0 40px rgba(220, 53, 69, 0.6);
+}
+
+.border-info:hover {
+    box-shadow: 0 0 20px rgba(13, 202, 240, 0.8), 0 0 40px rgba(13, 202, 240, 0.6);
+}
+
 /* =========================================
    12. CONSTRUCTION SCHEDULE TABLE
    ========================================= */
 
 .schedule-container {
-    background: var(--glass-bg); /* Auto-switches: White Glass (Light) / Dark Glass (Dark) */
+    background: var(--glass-bg);
+    /* Auto-switches: White Glass (Light) / Dark Glass (Dark) */
     border: 1px solid var(--glass-border);
     box-shadow: var(--glass-shadow);
     border-radius: 12px;
@@ -725,7 +769,8 @@ body.dark-theme .page-background-handler::after {
 }
 
 .schedule-header {
-    background: var(--main-bg-gradient); /* Keeps the purple gradient header */
+    background: var(--main-bg-gradient);
+    /* Keeps the purple gradient header */
     padding: 15px 20px;
     color: white;
     font-weight: 600;
@@ -737,12 +782,14 @@ body.dark-theme .page-background-handler::after {
 .schedule-table {
     width: 100%;
     font-size: 0.9rem;
-    color: var(--text-primary); /* Auto-switches: Black / White */
+    color: var(--text-primary);
+    /* Auto-switches: Black / White */
     border-collapse: collapse;
 }
 
 .schedule-table th {
-    background: rgba(0, 0, 0, 0.05); /* Subtle dim for header in Light Mode */
+    background: rgba(0, 0, 0, 0.05);
+    /* Subtle dim for header in Light Mode */
     padding: 12px 15px;
     font-size: 0.8rem;
     color: var(--text-secondary);
@@ -779,13 +826,15 @@ body.dark-theme .page-background-handler::after {
     font-size: 1rem;
     text-align: right;
 }
+
 /* =========================================
    13. LAYOUT UTILITIES
    ========================================= */
 
 /* Use this to wrap your main tabs */
 .central-container {
-    max-width: 1300px; /* Standardizes width across all pages */
+    max-width: 1300px;
+    /* Standardizes width across all pages */
     width: 100%;
     margin-left: auto;
     margin-right: auto;
@@ -795,27 +844,31 @@ body.dark-theme .page-background-handler::after {
 
 /* Fixes the uneven spacing inside the breakdown card */
 .section-spacer {
-    margin-bottom: 2rem; /* Consistent vertical spacing */
+    margin-bottom: 2rem;
+    /* Consistent vertical spacing */
 }
+
 /* =========================================
    14. GLOBAL BRAND THEME OVERRIDES
    ========================================= */
 
 /* --- SHARED STYLES (Apply to both modes) --- */
 /* Focus rings and links always follow the brand hue */
-.form-control:focus, 
+.form-control:focus,
 .form-select:focus {
     border-color: var(--brand-color) !important;
     box-shadow: 0 0 0 0.25rem rgba(74, 111, 165, 0.25) !important;
 }
 
-a, .text-primary {
+a,
+.text-primary {
     color: var(--brand-color) !important;
     text-decoration: none;
 }
 
 a:hover {
-    color: #34495e; /* Darker shade on hover */
+    color: #34495e;
+    /* Darker shade on hover */
 }
 
 /* =========================================
@@ -823,17 +876,20 @@ a:hover {
    Only applies when body is NOT dark theme
    ========================================= */
 body:not(.dark-theme) .btn-primary {
-    background: var(--main-bg-gradient) !important; /* Steel Blue Gradient */
+    background: var(--main-bg-gradient) !important;
+    /* Steel Blue Gradient */
     border: 0 !important;
     color: white !important;
-    box-shadow: 0 4px 15px rgba(74, 111, 165, 0.35); /* Soft Blue Glow */
+    box-shadow: 0 4px 15px rgba(74, 111, 165, 0.35);
+    /* Soft Blue Glow */
     transition: all 0.3s ease;
 }
 
 body:not(.dark-theme) .btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(74, 111, 165, 0.5);
-    filter: brightness(1.1); /* Slight brighten on hover */
+    filter: brightness(1.1);
+    /* Slight brighten on hover */
 }
 
 /* Active Tabs (Gradient Pill) */
@@ -866,15 +922,17 @@ body:not(.dark-theme) .btn-outline-primary:hover {
    Uses flat colors to blend better with dark cards
    ========================================= */
 body.dark-theme .btn-primary {
-    background: #6366f1 !important; /* Electric Indigo */
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: #6366f1 !important;
+    /* Electric Indigo */
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
     color: white !important;
     /* Subtle indigo glow */
-    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important; 
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.2) !important;
 }
 
 body.dark-theme .btn-primary:hover {
-    background: #5b7bb2 !important; /* Slightly lighter steel blue */
+    background: #5b7bb2 !important;
+    /* Slightly lighter steel blue */
     transform: translateY(-1px);
 }
 
@@ -887,7 +945,8 @@ body.dark-theme .badge.bg-primary {
 }
 
 body.dark-theme .btn-outline-primary {
-    color: #a3c2f0 !important; /* Lighter text for contrast on dark */
+    color: #a3c2f0 !important;
+    /* Lighter text for contrast on dark */
     border-color: #a3c2f0 !important;
 }
 
@@ -896,6 +955,7 @@ body.dark-theme .btn-outline-primary:hover {
     color: white !important;
     border-color: var(--brand-color) !important;
 }
+
 /* =========================================
    15. CALCULATION LOADER ANIMATION
    ========================================= */
@@ -915,7 +975,8 @@ body.dark-theme .btn-outline-primary:hover {
     width: 100%;
     height: 100%;
     border: 4px solid rgba(255, 255, 255, 0.1);
-    border-top: 4px solid var(--brand-color); /* Uses your theme color */
+    border-top: 4px solid var(--brand-color);
+    /* Uses your theme color */
     border-radius: 50%;
     animation: spin 1s linear infinite;
 }
@@ -930,69 +991,95 @@ body.dark-theme .btn-outline-primary:hover {
 
 /* Animations */
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+    0% {
+        transform: rotate(0deg);
+    }
+
+    100% {
+        transform: rotate(360deg);
+    }
 }
 
 @keyframes pulse-icon {
-    0% { transform: scale(0.85); opacity: 0.7; }
-    50% { transform: scale(1.1); opacity: 1; text-shadow: 0 0 15px var(--brand-color); }
-    100% { transform: scale(0.85); opacity: 0.7; }
+    0% {
+        transform: scale(0.85);
+        opacity: 0.7;
+    }
+
+    50% {
+        transform: scale(1.1);
+        opacity: 1;
+        text-shadow: 0 0 15px var(--brand-color);
+    }
+
+    100% {
+        transform: scale(0.85);
+        opacity: 0.7;
+    }
 }
+
 /* --- PRINT STYLES (Add to PropertyComparison.css) --- */
 @media print {
-  /* 1. HIDE EVERYTHING ELSE */
-  .app-header, 
-  .app-footer, 
-  .nav-buttons, 
-  .btn, 
-  .no-print,
-  .verification-banner,
-  .central-container, /* Hides the interactive tab view */
-  .property-comparison > .container-fluid > .row { /* Hides main layout */
-    display: none !important;
-  }
 
-  /* 2. SHOW THE PRINT REPORT CONTAINER */
-  .print-only-container {
-    display: block !important;
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    background: white;
-    font-size: 12pt;
-    color: black;
-    z-index: 9999;
-  }
+    /* 1. HIDE EVERYTHING ELSE */
+    .app-header,
+    .app-footer,
+    .nav-buttons,
+    .btn,
+    .no-print,
+    .verification-banner,
+    .central-container,
+    /* Hides the interactive tab view */
+    .property-comparison>.container-fluid>.row {
+        /* Hides main layout */
+        display: none !important;
+    }
 
-  /* 3. PRINT FORMATTING TWEAKS */
-  body {
-    background: white !important;
-    color: black !important;
-  }
-  
-  .card, .glass-card {
-    border: 1px solid #ddd !important;
-    box-shadow: none !important;
-    break-inside: avoid; /* Prevents cutting cards in half across pages */
-  }
+    /* 2. SHOW THE PRINT REPORT CONTAINER */
+    .print-only-container {
+        display: block !important;
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background: white;
+        font-size: 12pt;
+        color: black;
+        z-index: 9999;
+    }
 
-  /* Ensure tables print nicely */
-  .table {
-    width: 100% !important;
-    border-collapse: collapse !important;
-  }
-  .table th, .table td {
-    border: 1px solid #ccc !important;
-    padding: 8px !important;
-  }
+    /* 3. PRINT FORMATTING TWEAKS */
+    body {
+        background: white !important;
+        color: black !important;
+    }
+
+    .card,
+    .glass-card {
+        border: 1px solid #ddd !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+        /* Prevents cutting cards in half across pages */
+    }
+
+    /* Ensure tables print nicely */
+    .table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+    }
+
+    .table th,
+    .table td {
+        border: 1px solid #ccc !important;
+        padding: 8px !important;
+    }
 }
 
 /* Hide print container on normal screen */
 .print-only-container {
-  display: none;
+    display: none;
 }
+
 /* === Bottom Navigation Styling === */
 
 /* 1. Light Mode (Default) */
@@ -1000,20 +1087,24 @@ body.dark-theme .btn-outline-primary:hover {
     background-color: #ffffff;
     border-top: 1px solid #dee2e6;
 }
+
 .nav-item-inactive {
-    color: #6c757d; /* Standard Muted Gray */
+    color: #6c757d;
+    /* Standard Muted Gray */
 }
 
 /* 2. Dark Mode Overrides */
 [data-bs-theme="dark"] .mobile-bottom-nav {
     /* ✨ Elegant Dark Blue Background */
-    background-color: #0f172a !important; 
+    background-color: #0f172a !important;
     border-top: 1px solid #1e293b !important;
 }
 
 [data-bs-theme="dark"] .nav-item-inactive {
-    color: #94a3b8; /* Lighter Blue-Gray for visibility */
+    color: #94a3b8;
+    /* Lighter Blue-Gray for visibility */
 }
+
 /* =========================================
    16. BOTTOM NAVIGATION (THEME ENGINE)
    ========================================= */
@@ -1023,9 +1114,10 @@ body.dark-theme .btn-outline-primary:hover {
     --nav-bar-bg: #ffffff;
     --nav-bar-border: rgba(0, 0, 0, 0.05);
     --nav-bar-shadow: 0 -5px 20px rgba(0, 0, 0, 0.05);
-    
+
     /* Pill Colors */
-    --nav-pill-active-bg: #24466ec5; /* Uses your Steel Blue */
+    --nav-pill-active-bg: #24466ec5;
+    /* Uses your Steel Blue */
     --nav-pill-active-text: #ffffff;
     --nav-pill-inactive-bg: transparent;
     --nav-pill-inactive-text: #6c757d;
@@ -1033,14 +1125,17 @@ body.dark-theme .btn-outline-primary:hover {
 
 /* 🌙 DARK MODE VARIABLES */
 [data-theme='dark'] {
-    --nav-bar-bg: #0F0F0F; /* Deep Matte Black (No transparency) */
+    --nav-bar-bg: #0F0F0F;
+    /* Deep Matte Black (No transparency) */
     --nav-bar-border: rgba(255, 255, 255, 0.1);
     --nav-bar-shadow: 0 -10px 30px rgba(0, 0, 0, 0.9);
-    
+
     /* Neon Pill Colors */
-    --nav-pill-active-bg: #24476e; /* Neon Green */
+    --nav-pill-active-bg: #24476e;
+    /* Neon Green */
     --nav-pill-active-text: #d6d3d3;
-    --nav-pill-inactive-bg: #1f1f1f; /* Solid Dark Gray */
+    --nav-pill-inactive-bg: #1f1f1f;
+    /* Solid Dark Gray */
     --nav-pill-inactive-text: #888888;
 }
 
@@ -1051,19 +1146,19 @@ body.dark-theme .btn-outline-primary:hover {
     left: 0;
     width: 100%;
     z-index: 1050;
-    
+
     /* Using the variables defined above */
-    background-color: var(--nav-bar-bg) !important; 
+    background-color: var(--nav-bar-bg) !important;
     border-top: 1px solid var(--nav-bar-border);
     box-shadow: var(--nav-bar-shadow);
-    
+
     /* Shape & Safe Area */
     border-radius: 20px 20px 0 0;
     padding-top: 10px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
-    
+
     /* Disable glass effect to ensure solid background in dark mode */
-    backdrop-filter: none !important; 
+    backdrop-filter: none !important;
     transition: background-color 0.3s ease, border-color 0.3s ease;
 }
 
@@ -1075,14 +1170,16 @@ body.dark-theme .btn-outline-primary:hover {
     cursor: pointer;
     border-radius: 50px;
     height: 40px;
-    min-width: 48px; /* Icon width */
+    min-width: 48px;
+    /* Icon width */
     padding: 0 12px;
-    
+
     /* Default (Inactive) State */
     background-color: var(--nav-pill-inactive-bg);
     color: var(--nav-pill-inactive-text);
-    border: 1px solid transparent; /* Prevents layout shift when border adds in active */
-    
+    border: 1px solid transparent;
+    /* Prevents layout shift when border adds in active */
+
     transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
@@ -1095,13 +1192,15 @@ body.dark-theme .btn-outline-primary:hover {
 .nav-pill-item.active {
     background-color: var(--nav-pill-active-bg);
     color: var(--nav-pill-active-text);
-    padding: 0 24px; /* Expand width */
-    box-shadow: 0 4px 15px rgba(0,0,0,0.15); /* Subtle lift */
+    padding: 0 24px;
+    /* Expand width */
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+    /* Subtle lift */
 }
 
 /* Specific fix for Dark Mode Border on inactive items */
 [data-theme='dark'] .nav-pill-item:not(.active) {
-    border: 1px solid rgba(255,255,255,0.05);
+    border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 /* The Expanding Text Label */
@@ -1120,4 +1219,16 @@ body.dark-theme .btn-outline-primary:hover {
     max-width: 100px;
     opacity: 1;
     margin-left: 10px;
+}
+
+.accordion-item {
+    border: 1px solid rgba(255, 255, 255, 0.8) !important;
+    /* Default (Light Mode) */
+}
+
+@media (prefers-color-scheme: dark) {
+    .accordion-item {
+        border-color: rgba(255, 255, 255, 0.3) !important;
+        /* Slightly dimmer in dark mode to avoid glare */
+    }
 }

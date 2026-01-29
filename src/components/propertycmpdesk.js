@@ -713,7 +713,7 @@ const PropertyComparisonDesktop = () => {
             const possessionMonths = getSafeValue(selectedProperty?.possessionMonths) || 0;
             const baseCost = propertySize * getSafeValue(purchasePrice);
             const extraCharges = getSafeValue(otherCharges);
-            const agreementValue = baseCost + extraCharges;
+            const agreementValue = baseCost;
             const stampDutyCost = agreementValue * (getSafeValue(stampDuty) / 100);
             const gstCost = agreementValue * (getSafeValue(gstPercentage) / 100);
             const totalCost = baseCost;
@@ -785,8 +785,7 @@ const PropertyComparisonDesktop = () => {
             if (paymentPlan === 'clp' && homeLoanAmount > 0) {
 
                 // ============================================================
-                // 1. GENERATE SCHEDULE FIRST (Moved OUT of the else block)
-                //    This ensures 'idcSchedule' exists for BOTH strategies.
+                // 1. GENERATE BASE SCHEDULE (Structure Only)
                 // ============================================================
                 const interval = getSafeValue(assumptions.bankDisbursementInterval) || 3;
                 let rawStart = getSafeValue(assumptions.bankDisbursementStartMonth);
@@ -799,28 +798,28 @@ const PropertyComparisonDesktop = () => {
                 const slabAmount = homeLoanAmount / numberOfSlabs;
                 const hlRate = getSafeValue(assumptions.homeLoanRate);
 
+                // Create initial slabs (Interest calculated later)
                 for (let i = 0; i < numberOfSlabs; i++) {
                     const month = startMonth + (i * interval);
                     if (month <= fundingEndMonth) {
-                        const slabMonthlyInterest = (slabAmount * (hlRate / 100)) / 12;
-                        const duration = Math.max(0, possessionMonths - month);
-                        const thisSlabTotalCost = slabMonthlyInterest * duration;
-
                         idcSchedule.push({
                             slabNo: i + 1,
                             releaseMonth: month,
                             amount: slabAmount,
-                            interestCost: thisSlabTotalCost
+                            interestCost: 0 // Placeholder, we calculate this accurately below
                         });
-                        totalLifetimeInterest += thisSlabTotalCost;
                     }
                 }
 
                 // ============================================================
-                // 2. NOW EXECUTE STRATEGY
+                // 2. EXECUTE STRATEGY (Calculate Exact Costs)
                 // ============================================================
+
+                // Determine the EXACT month interest stops (The month before EMI starts)
+                const idcCutoffMonth = realHomeLoanStartMonth - 1;
+
                 if (isManualMode) {
-                    // MANUAL:
+                    // MANUAL STRATEGY (Smart Saver)
                     const manualStart = getSafeValue(assumptions.homeLoanStartMonth);
                     const mStart = (manualStart !== undefined && manualStart !== null) ? parseInt(manualStart) : 0;
 
@@ -829,12 +828,12 @@ const PropertyComparisonDesktop = () => {
                         manualStartMonth: mStart,
                         possessionMonths,
                         totalHoldingMonths,
-                        hlRate: getSafeValue(assumptions.homeLoanRate),
+                        hlRate,
                         hlTerm: getSafeValue(assumptions.homeLoanTerm),
                         personalLoan1Amount,
                         personalLoan1EMI,
                         assumptions,
-                        idcSchedule: idcSchedule // ✅ Now this contains data!
+                        idcSchedule // Pass the schedule structure
                     });
 
                     totalIDC = manualResult.totalIDC;
@@ -842,18 +841,19 @@ const PropertyComparisonDesktop = () => {
                     maxIDCEMI = manualResult.maxIDCEMI;
                     monthlyIDCEMI = manualResult.monthlyIDCEMI;
                     truePrePossessionTotal = manualResult.truePrePossessionTotal;
-                    // Note: idcSchedule is already updated in memory
+
+                    // CRITICAL FIX: Ensure the return object uses this value
+                    totalLifetimeInterest = totalIDC;
 
                 } else {
-                    // DEFAULT: Run standard simulation loop for IDC
+                    // DEFAULT STRATEGY (Standard CLP)
+
                     let cumulativeDisbursement = 0;
                     let runningTotalIDC = 0;
                     let runningTotalOutflow = 0;
                     let isFirstIDCPayment = false;
 
-                    if (startMonth === 0) {
-                        cumulativeDisbursement += slabAmount;
-                    }
+                    if (startMonth === 0) cumulativeDisbursement += slabAmount;
 
                     const hlTerm = getSafeValue(assumptions.homeLoanTerm);
                     let fullHL_EMI = 0;
@@ -866,7 +866,9 @@ const PropertyComparisonDesktop = () => {
                     const loopEnd = Math.min(totalHoldingMonths || possessionMonths, possessionMonths);
 
                     for (let m = 1; m <= loopEnd; m++) {
-                        const isPhase1_IDC = m <= fundingEndMonth;
+                        // LOGIC UPDATE: IDC Active only until Cutoff Month (e.g. Month 18)
+                        const isPhase1_IDC = m <= fundingEndMonth && m <= idcCutoffMonth;
+
                         let monthlyHLComponent = 0;
 
                         if (isPhase1_IDC) {
@@ -878,6 +880,7 @@ const PropertyComparisonDesktop = () => {
                                 if (cumulativeDisbursement > homeLoanAmount) cumulativeDisbursement = homeLoanAmount;
                             }
 
+                            // Interest on disbursed amount
                             monthlyHLComponent = (cumulativeDisbursement * (hlRate / 100)) / 12;
                             runningTotalIDC += monthlyHLComponent;
 
@@ -889,10 +892,17 @@ const PropertyComparisonDesktop = () => {
                                 maxIDCEMI = monthlyHLComponent;
                             }
                         } else {
-                            monthlyHLComponent = fullHL_EMI;
+                            // Phase 2: EMI Starts (or Gap period)
+                            if (m >= realHomeLoanStartMonth) {
+                                monthlyHLComponent = fullHL_EMI;
+                            } else {
+                                // Gap between IDC end and EMI start (rare)
+                                monthlyHLComponent = (cumulativeDisbursement * (hlRate / 100)) / 12;
+                                runningTotalIDC += monthlyHLComponent;
+                            }
                         }
 
-                        const monthlyPL1 = (personalLoan1Amount > 0 && m >= pl1StartMonth) // Check Start Month!
+                        const monthlyPL1 = (personalLoan1Amount > 0 && m >= pl1StartMonth)
                             ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term)
                             : 0;
                         runningTotalOutflow += (monthlyHLComponent + monthlyPL1);
@@ -901,14 +911,26 @@ const PropertyComparisonDesktop = () => {
                     totalIDC = runningTotalIDC;
                     truePrePossessionTotal = runningTotalOutflow;
 
-                    const activeMonths = Math.min(loopEnd, fundingEndMonth) - startMonth + 1;
-                    monthlyIDCEMI = activeMonths > 0 ? (totalIDC / activeMonths) : 0;
+                    // Calculate Average
+                    const activeIDCMonths = Math.min(idcCutoffMonth, fundingEndMonth) - startMonth + 1;
+                    monthlyIDCEMI = activeIDCMonths > 0 ? (totalIDC / activeIDCMonths) : 0;
 
-                    // Update schedule with calculated interest costs
-                    idcSchedule = idcSchedule.map(slab => ({
-                        ...slab,
-                        interestCost: (slab.amount * (hlRate / 100) / 12) * (possessionMonths - slab.releaseMonth + 1)
-                    }));
+                    // 3. UPDATE SCHEDULE TABLE WITH CORRECT VALUES
+                    idcSchedule = idcSchedule.map(slab => {
+                        // If slab released AFTER interest cutoff, it costs 0 IDC (straight to EMI)
+                        if (slab.releaseMonth > idcCutoffMonth) return { ...slab, interestCost: 0 };
+
+                        // Interest Duration = Cutoff - Release + 1 (e.g. 18 - 3 + 1 = 16 months)
+                        const monthsOfInterest = Math.max(0, idcCutoffMonth - slab.releaseMonth + 1);
+
+                        return {
+                            ...slab,
+                            interestCost: (slab.amount * (hlRate / 100) / 12) * monthsOfInterest
+                        };
+                    });
+
+                    // CRITICAL FIX: Overwrite the top-level variable so the return statement is correct
+                    totalLifetimeInterest = totalIDC;
                 }
             }
 
@@ -937,8 +959,8 @@ const PropertyComparisonDesktop = () => {
             const postPossessionMonths = Math.max(0, totalHoldingMonths - possessionMonths);
             const prePossessionEMI = personalLoan1EMI + monthlyIDCEMI;
             const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
-            const actualIDCPaid = monthlyIDCEMI * prePossessionMonths;
-            const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + actualIDCPaid;
+            // ✅ FIX: Use the precise 'totalIDC' calculated from the schedule loop
+const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + totalIDC;
             let phase1TotalCalc = 0;
             if (paymentPlan === 'clp' && truePrePossessionTotal > 0) {
                 phase1TotalCalc = truePrePossessionTotal;
@@ -1057,6 +1079,7 @@ const PropertyComparisonDesktop = () => {
                 items: [
                     { label: "Property Size", value: `${propertySize} sq.ft` },
                     { label: "Purchase Price", value: `₹${propertyData.purchasePrice}/sq.ft` },
+                    { label: "Other Charges", value: `₹${propertyData.otherCharges}/sq.ft` },
                     { label: "Stamp Duty", value: formatCurrency(detailedBreakdown.stampDutyCost) },
                     { label: "GST charges", value: formatCurrency(detailedBreakdown.gstCost) },
                     { label: "Total Property Cost", value: formatCurrency(detailedBreakdown.totalCost) }
@@ -1387,7 +1410,7 @@ const PropertyComparisonDesktop = () => {
 
             return (
                 // CHANGE 1: Used 'glass-card' as the main wrapper. Removed standard 'card' borders.
-                <div className="glass-card mb-3">
+                <div className="glass-card mb-3 border-1 border-secondary">
 
                     {/* Header (Clickable) */}
                     <div
@@ -1860,7 +1883,7 @@ const PropertyComparisonDesktop = () => {
                                                     <span className="input-group-text">%</span>
                                                 </div>
                                                 <small className="text-muted" style={{ fontSize: '0.75rem' }}>
-                                                    Applied on <b>Total Cost</b> of the Property
+                                                    Applied on <b>Base Cost</b> of the Property
                                                 </small>
                                             </div>
                                             <div className="col-md-6">
@@ -1872,7 +1895,7 @@ const PropertyComparisonDesktop = () => {
                                                         const price = getSafeValue(propertyData.purchasePrice);
                                                         const others = getSafeValue(propertyData.otherCharges);
                                                         const gst = getSafeValue(propertyData.gstPercentage);
-                                                        const totalVal = (size * price) + others;
+                                                        const totalVal = (size * price);
                                                         return formatCurrency(totalVal * (gst / 100));
                                                     })()}
                                                 </div>
@@ -3420,6 +3443,58 @@ const PropertyComparisonDesktop = () => {
         </div>
     );
 
+    // Reusable Component for Horizontal Strips
+    const renderInfoStrip = ({ title, subtitle, icon, color, badge, badgeTextColor, columns }) => (
+        <div className={`glass-card mb-4 p-0 border-0 border-start border-4 border-${color} shadow-sm bg-white overflow-hidden`}>
+            <div className="row g-0 h-100">
+
+                {/* Left Section */}
+                <div className="col-md-3 col-12 d-flex align-items-center p-3 border-end border-light">
+                    <div className="d-flex align-items-center w-100">
+                        <div className="me-3 flex-shrink-0 ps-4">
+                            <div className={`rounded-circle bg-${color} bg-opacity-10 d-flex align-items-center justify-content-center`} style={{ width: '48px', height: '48px' }}>
+                                <i className={`bi ${icon} fs-4 text-${color}`}></i>
+                            </div>
+                        </div>
+                        <div className="flex-grow-1" style={{ minWidth: 0 }}>
+                            <div className="fw-bold mb-0 text-truncate" style={{ lineHeight: '1.2', fontSize: '0.95rem' }}>{title}</div>
+                            <small className="text-muted d-block text-truncate" style={{ fontSize: '0.7rem' }}>{subtitle}</small>
+                            {badge && (
+                                // UPDATED LINE: Uses badgeTextColor if provided, otherwise falls back to the main color
+                                <span className={`badge bg-${color} bg-opacity-10 text-${badgeTextColor || color} border border-${color} border-opacity-25 shadow-sm mt-1`} style={{ fontSize: '0.6rem', fontWeight: '600' }}>
+                                    {badge}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Right Section (Unchanged) */}
+                <div className="col-md-9 col-12">
+                    <div className="d-flex align-items-center h-100 w-100 py-2">
+                        {columns.map((col, index) => (
+                            <div key={index} className={`flex-fill text-center px-2 ${index !== columns.length - 1 ? 'border-end border-secondary border-opacity-10' : ''}`}>
+                                <div className="d-flex flex-column justify-content-center h-100">
+                                    <small className="text-muted text-uppercase fw-bold d-block mb-1" style={{ fontSize: '0.65rem', letterSpacing: '0.5px' }}>
+                                        {col.label}
+                                    </small>
+                                    <div className={`fw-bold ${col.color ? `text-${col.color}` : 'text-dark'}`} style={{ fontSize: '1.1rem' }}>
+                                        {col.value}
+                                    </div>
+                                    {col.subtext && (
+                                        <small className="text-muted d-block mt-1" style={{ fontSize: '0.6rem' }}>
+                                            {col.subtext}
+                                        </small>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
     const renderBreakdownTab = () => {
         const breakdown = calculatedData.detailedBreakdown;
 
@@ -3504,7 +3579,8 @@ const PropertyComparisonDesktop = () => {
                                                     homeLoanTerm: propertyData.assumptions.homeLoanTerm, // e.g., 20 years
                                                     lastBankDisbursementMonth: getSafeValue(propertyData.assumptions.lastBankDisbursementMonth) || null,
                                                     homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
-                                                    manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth)
+                                                    manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth),
+                                                    pl1StartMonth: breakdown.pl1StartMonth
                                                 }, "Calculating Monthly Breakdown...")}
                                             >
                                                 {/* Header Section */}
@@ -3545,7 +3621,9 @@ const PropertyComparisonDesktop = () => {
                                                         totalPaid: breakdown.prePossessionTotal,
                                                         homeLoanAmount: breakdown.homeLoanAmount,
                                                         lastBankDisbursementMonth: propertyData.assumptions.lastBankDisbursementMonth,
-                                                        interestRate: propertyData.assumptions.homeLoanRate
+                                                        interestRate: propertyData.assumptions.homeLoanRate,
+                                                        homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
+                                                        manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth)
                                                     }, "Calculating IDC Slabs...")}
                                                 >
                                                     {/* Header Row with Title and Button */}
@@ -3683,150 +3761,244 @@ const PropertyComparisonDesktop = () => {
                             </div>
 
                             {/* Summary Card - Removed 'm-4', replaced with standard spacing */}
-                            <div className="mt-4">
-                                <div className="p-4 bg-info text-white rounded shadow-sm">
-                                    <div className="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h6 className="mb-1 fw-bold">Total EMI Commitment</h6>
-                                            <small>Combined across both timelines</small>
-                                            {breakdown.hasIDC && (
-                                                <div className="mt-2 small">
-                                                    <i className="bi bi-info-circle me-1"></i>
-                                                    Includes Average IDC ({formatCurrency(breakdown.monthlyIDCEMI)})
+                            {/* Total Commitment Visual Split */}
+                            <div className="glass-card mt-4 mb-4 pt-0 pb-2 border-0 border-start border-4 border-info shadow-sm bg-white">
+                                <div className="row align-items-center">
+
+                                    {/* Left Side: The Grand Total (Hero Metric) */}
+                                    <div className="col-md-3 border-light">
+                                        <small className="text-uppercase text-muted fw-bold" style={{ fontSize: '0.7rem', letterSpacing: '0.5px' }}>
+                                            Lifetime Commitment
+                                        </small>
+                                        <div className="fw-bold text-info my-1" style={{ fontSize: '2rem' }}>
+                                            {formatCurrency(breakdown.totalEMIPaid)}
+                                        </div>
+                                        {breakdown.hasIDC && (
+                                            <div className="d-flex align-items-center text-muted">
+                                                <i className="bi bi-info-circle-fill me-2 text-info opacity-50"></i>
+                                                <small style={{ fontSize: '0.7rem' }}>Includes Avg IDC ({formatCurrency(breakdown.monthlyIDCEMI)})</small>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Right Side: The Visual Timeline Split */}
+                                    <div className="col-md-9 mt-3">
+                                        {/* Labels */}
+                                        <div className="d-flex justify-content-between mb-2">
+                                            <span className="fw-bold small text-primary">
+                                                <i className="bi bi-hammer me-1"></i>Pre-Possession
+                                            </span>
+                                            <span className="fw-bold small text-success">
+                                                <i className="bi bi-house-check me-1"></i>Post-Possession
+                                            </span>
+                                        </div>
+
+                                        {/* The Visual Bar */}
+                                        <div className="progress rounded-pill mb-3" style={{ height: '12px', backgroundColor: '#e9ecef' }}>
+                                            <div
+                                                className="progress-bar bg-primary"
+                                                role="progressbar"
+                                                style={{ width: `${(breakdown.prePossessionTotal / breakdown.totalEMIPaid) * 100}%` }}
+                                                aria-label="Pre-Possession"
+                                            ></div>
+                                            <div
+                                                className="progress-bar bg-success"
+                                                role="progressbar"
+                                                style={{ width: `${(breakdown.postPossessionTotal / breakdown.totalEMIPaid) * 100}%` }}
+                                                aria-label="Post-Possession"
+                                            ></div>
+                                        </div>
+
+                                        {/* The Values Grid */}
+                                        <div className="d-flex justify-content-between">
+                                            <div>
+                                                <div className="fw-bold fs-5">{formatCurrency(breakdown.prePossessionTotal)}</div>
+                                                <small className="text-muted text-uppercase" style={{ fontSize: '0.65rem' }}>Construction Phase</small>
+                                            </div>
+                                            <div className="text-end">
+                                                <div className="fw-bold fs-5">{formatCurrency(breakdown.postPossessionTotal)}</div>
+                                                <small className="text-muted text-uppercase" style={{ fontSize: '0.65rem' }}>Repayment Phase</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* ======================================================= */}
+                        {/* 📊 NEW: CLEAN LOAN AMORTIZATION TABLE (Matching Target Image) */}
+                        {/* ======================================================= */}
+                        <div className="schedule-container border shadow-sm rounded-4 overflow-hidden mb-5">
+                            <div className="table-responsive">
+                                <table className="schedule-table align-middle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th className="py-3 ps-4 text-start" style={{ width: '30%' }}>Component</th>
+                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Monthly Impact</th>
+                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Total Paid</th>
+                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Interest Cost</th>
+                                            <th className="py-3 text-end pe-4" style={{ width: '17.5%' }}>Balance / Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+
+                                        {/* 1. IDC ROW */}
+                                        {breakdown.hasIDC && (
+                                            <tr>
+                                                <td className="ps-4 py-4">
+                                                    <div className="d-flex align-items-center">
+                                                        <i className="bi bi-calculator-fill fs-2 text-warning me-3"></i>
+                                                        <div>
+                                                            <div className="fw-bold">IDC Component</div>
+                                                            <div className="small text-muted">(Interest During Construction)</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">Avg Monthly</div>
+                                                    <div className="fs-5 text-muted">{formatCurrency(breakdown.monthlyIDCEMI)}</div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">Total</div>
+                                                    <div className="fs-5 text-muted">{formatLakhs(breakdown.totalIDC)}</div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">100%</div>
+                                                    <div className="fs-5 text-muted">Interest</div>
+                                                </td>
+                                                <td className="text-end pe-4">
+                                                    <div className="small text-muted mb-1">Final Loan Bal</div>
+                                                    <div className="fs-5">{formatLakhs(breakdown.totalHomeLoanAtCompletion + breakdown.totalIDC)}</div>
+                                                </td>
+                                            </tr>
+                                        )}
+
+                                        {/* 2. HOME LOAN ROW */}
+                                        <tr>
+                                            <td className="ps-4 py-4">
+                                                <div className="d-flex align-items-center">
+                                                    <i className="bi bi-bank fs-2 text-primary me-3"></i>
+                                                    <div>
+                                                        <div className="fw-bold">Home Loan</div>
+                                                        <div className="small text-muted">(Principal + Interest)</div>
+                                                        {breakdown.hasIDC && (
+                                                            <span className="badge rounded-pill bg-light text-dark border mt-1 fw-normal" style={{ fontSize: '0.7rem' }}>
+                                                                Includes IDC
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="text-end">
-                                            <div className="fw-bold fs-3">{formatCurrency(breakdown.totalEMIPaid)}</div>
-                                            <small>Pre: {formatCurrency(breakdown.prePossessionTotal)} + Post: {formatCurrency(breakdown.postPossessionTotal)}</small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                                            </td>
+                                            <td className="text-end">
+                                                <div className="small text-muted mb-1">EMI</div>
+                                                <div className="fs-5 text-muted">{formatCurrency(breakdown.homeLoanEMI)}</div>
+                                            </td>
+                                            <td className="text-end">
+                                                <div className="small text-muted mb-1">Total Paid</div>
+                                                <div className="fs-5 text-muted">{formatLakhs(breakdown.homeLoanEMIPaid)}</div>
+                                            </td>
+                                            <td className="text-end">
+                                                <div className="small text-muted mb-1">Interest</div>
+                                                <div className="fs-5 text-muted">{formatLakhs(breakdown.homeLoanInterestPaid)}</div>
+                                            </td>
+                                            <td className="text-end pe-4">
+                                                <div className="small text-muted mb-1">Outstanding</div>
+                                                <div className="fs-5">{formatLakhs(breakdown.homeLoanOutstanding)}</div>
+                                            </td>
+                                        </tr>
 
-                        {/* 2. Interest During Construction (IDC) Details */}
-                        {breakdown.hasIDC && (
-                            <div className="section-spacer">
-                                <h5 className="mb-3">
-                                    <i className="bi bi-calculator text-warning me-2"></i>
-                                    Interest During Construction (IDC)
-                                </h5>
-                                <div className="row g-3">
-                                    {renderStatCard("Average IDC EMI", formatCurrency(breakdown.monthlyIDCEMI), "Interest during construction", "success", 4)}
-                                    {renderStatCard("Total IDC Amount", formatCurrency(breakdown.totalIDC), `Accumulated over ${breakdown.constructionMonths} months`, "danger", 4)}
-                                    {renderStatCard("Home Loan with IDC", formatCurrency(breakdown.totalHomeLoanAtCompletion + breakdown.totalIDC), "Principal + Total IDC", "info", 4)}
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 3. Home Loan Detailed Analysis */}
-                        <div className="section-spacer">
-                            <h5 className="mb-3">
-                                <i className="bi bi-bank text-primary me-2"></i>
-                                Home Loan Analysis
-                                {breakdown.hasIDC && (
-                                    <span className="badge bg-warning ms-2">Includes IDC</span>
-                                )}
-                            </h5>
-                            <div className="row g-3">
-                                <div className="col-md-3">
-                                    <div className="p-3 bg-primary text-white rounded text-center h-100">
-                                        <small className="text-white">Total EMI per Month</small>
-                                        <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanEMI)}</div>
-                                        <small className="text-white">Monthly payment</small>
-                                    </div>
-                                </div>
-                                <div className="col-md-3">
-                                    <div className="p-3 bg-success text-white rounded text-center h-100">
-                                        <small className="text-white">Total EMI Paid</small>
-                                        <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanEMIPaid)}</div>
-                                        <small className="text-white">{breakdown.homeLoanPaymentsMade} payments made</small>
-                                    </div>
-                                </div>
-                                <div className="col-md-3">
-                                    <div className="p-3 bg-warning text-white rounded text-center h-100">
-                                        <small className="text-white">Total Interest Paid</small>
-                                        <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanInterestPaid)}</div>
-                                        <small className="text-white">Over {breakdown.homeLoanPaymentsMade} months</small>
-                                    </div>
-                                </div>
-                                <div className="col-md-3">
-                                    <div className="p-3 bg-danger text-white rounded text-center h-100">
-                                        <small className="text-white">Total EMI Due</small>
-                                        <div className="fw-bold fs-4">{formatCurrency(breakdown.homeLoanOutstanding)}</div>
-                                        <small className="text-white">Outstanding balance</small>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* 4. Personal Loan 1 Analysis */}
-                        {breakdown.hasPersonalLoan1 && (
-                            <div className="section-spacer">
-                                {renderLoanSection("Personal Loan 1 Analysis", "bi-cash-coin", "success",
-                                    formatCurrency(breakdown.personalLoan1EMI),
-                                    formatCurrency(breakdown.personalLoan1EMIPaid),
-                                    formatCurrency(breakdown.personalLoan1InterestPaid),
-                                    formatCurrency(breakdown.personalLoan1Outstanding),
-                                    breakdown.pl1PaymentsMade
-                                )}
-                            </div>
-                        )}
-
-                        {/* 5. Personal Loan 2 Analysis */}
-                        {breakdown.hasPersonalLoan2 && (
-                            <div className="section-spacer">
-                                {renderLoanSection("Personal Loan 2 Analysis", "bi-cash-coin", "warning",
-                                    formatCurrency(breakdown.personalLoan2EMI),
-                                    formatCurrency(breakdown.personalLoan2EMIPaid),
-                                    formatCurrency(breakdown.personalLoan2InterestPaid),
-                                    formatCurrency(breakdown.personalLoan2Outstanding),
-                                    breakdown.pl2PaymentsMade
-                                )}
-                            </div>
-                        )}
-
-                        {/* 6. Total Loan Summary */}
-                        <div className="section-spacer">
-                            <h5 className="mb-3"><i className="bi bi-calculator text-info me-2"></i>Total Loan Summary</h5>
-                            <div className="row g-3">
-                                {renderStatCard("Total Monthly EMI", formatCurrency(breakdown.homeLoanEMI + breakdown.personalLoan1EMI + breakdown.personalLoan2EMI), "Combined monthly payment", "info", 4)}
-                                {renderStatCard("Total EMI Paid", formatCurrency(breakdown.totalEMIPaid), `Over ${breakdown.years} years`, "success", 4)}
-                                {renderStatCard("Total Outstanding", formatCurrency(breakdown.totalLoanOutstanding), "Total balance due", "danger", 4)}
-                            </div>
-                        </div>
-
-                        {/* 7. Interest Summary */}
-                        <div className="section-spacer">
-                            <h5 className="mb-3">
-                                <i className="bi bi-percent text-warning me-2"></i>
-                                Total Interest Summary
-                            </h5>
-                            <div className="p-3 bg-warning text-white rounded">
-                                <div className="d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <h3 className="fw-bold mb-1">
-                                            {formatLakhs(breakdown.totalInterestPaid)}
-                                        </h3>
-                                        <small>Total Interest Paid ({breakdown.years} years)</small>
-                                        {breakdown.hasIDC && (
-                                            <div className="mt-2">
-                                                <small className="text-white opacity-15">
-                                                    <i className="bi bi-calculator me-1"></i>
-                                                    Includes {formatLakhs(breakdown.totalIDC)} IDC
-                                                </small>
-                                            </div>
+                                        {/* 3. PL1 ROW */}
+                                        {breakdown.hasPersonalLoan1 && (
+                                            <tr>
+                                                <td className="ps-4 py-4">
+                                                    <div className="d-flex align-items-center">
+                                                        <i className="bi bi-cash-stack fs-2 text-success me-3"></i>
+                                                        <div>
+                                                            <div className="fw-bold">Personal Loan 1</div>
+                                                            <div className="small text-muted">(Secondary Funding)</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">EMI</div>
+                                                    <div className="fs-5 text-muted">{formatCurrency(breakdown.personalLoan1EMI)}</div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">Total Paid</div>
+                                                    <div className="fs-5 text-muted">{formatLakhs(breakdown.personalLoan1EMIPaid)}</div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">Interest</div>
+                                                    <div className="fs-5 text-muted">{formatCurrency(breakdown.personalLoan1InterestPaid)}</div>
+                                                </td>
+                                                <td className="text-end pe-4">
+                                                    <div className="small text-muted mb-1">Outstanding</div>
+                                                    <div className="fs-5">{formatCurrency(breakdown.personalLoan1Outstanding)}</div>
+                                                </td>
+                                            </tr>
                                         )}
-                                    </div>
-                                    <div className="text-end">
-                                        {breakdown.hasIDC && (
-                                            <div className="badge bg-warning shadow-sm" style={{ color: '#333' }}>
-                                                IDC: {formatLakhs(breakdown.totalIDC)}
-                                            </div>
+
+                                        {/* 4. PL2 ROW */}
+                                        {breakdown.hasPersonalLoan2 && (
+                                            <tr>
+                                                <td className="ps-4 py-4">
+                                                    <div className="d-flex align-items-center">
+                                                        <i className="bi bi-wallet2 fs-2 text-warning me-3"></i>
+                                                        <div>
+                                                            <div className="fw-bold">Personal Loan 2</div>
+                                                            <div className="small text-muted">(Additional Funding)</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">EMI</div>
+                                                    <div className="fs-5 text-muted">{formatCurrency(breakdown.personalLoan2EMI)}</div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">Total Paid</div>
+                                                    <div className="fs-5 text-muted">{formatLakhs(breakdown.personalLoan2EMIPaid)}</div>
+                                                </td>
+                                                <td className="text-end">
+                                                    <div className="small text-muted mb-1">Interest</div>
+                                                    <div className="fs-5 text-muted">{formatCurrency(breakdown.personalLoan2InterestPaid)}</div>
+                                                </td>
+                                                <td className="text-end pe-4">
+                                                    <div className="small text-muted mb-1">Outstanding</div>
+                                                    <div className="fs-5">{formatCurrency(breakdown.personalLoan2Outstanding)}</div>
+                                                </td>
+                                            </tr>
                                         )}
-                                    </div>
-                                </div>
+
+                                        {/* 5. TOTAL SUMMARY ROW */}
+                                        <tr>
+                                            <td className="ps-4 py-4">
+                                                <div className="d-flex align-items-center">
+                                                    <i className="bi bi-calculator fs-2 me-3"></i>
+                                                    <div>
+                                                        <div className="fw-bold">Total Summary</div>
+                                                        <div className="small text-muted">(All Active Loans)</div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="text-end">
+                                                <div className="small text-muted mb-1">Total Monthly EMI</div>
+                                                <div className="fs-4 text-muted">{formatCurrency(breakdown.homeLoanEMI + breakdown.personalLoan1EMI + breakdown.personalLoan2EMI)}</div>
+                                            </td>
+                                            <td className="text-end">
+                                                <div className="small text-muted mb-1">Total Paid</div>
+                                                <div className="fs-4 text-muted">{formatLakhs(breakdown.totalEMIPaid)}</div>
+                                            </td>
+                                            <td className="text-end">
+                                                <div className="small text-muted mb-1">Total Interest</div>
+                                                <div className="fs-4 text-muted">{formatLakhs(breakdown.totalInterestPaid)}</div>
+                                            </td>
+                                            <td className="text-end pe-4">
+                                                <div className="small text-muted mb-1">Outstanding</div>
+                                                <div className="fs-4">{formatLakhs(breakdown.totalLoanOutstanding)}</div>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
 

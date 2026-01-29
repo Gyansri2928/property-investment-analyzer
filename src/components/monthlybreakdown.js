@@ -16,10 +16,11 @@ const MonthlyBreakdownPage = () => {
     lastBankDisbursementMonth,
     homeLoanTerm = 20,
     homeLoanStartMode,
-    manualStartMonth
+    manualStartMonth,
+    pl1StartMonth = 0
   } = location.state || {};
 
-  const formatCurrency = (val) => val ? `₹${Math.round(val).toLocaleString()}` : '₹0';
+  const formatCurrency = (val) => val ? `₹${Math.round(val).toLocaleString('en-IN')}` : '₹0';
 
   if (!idcSchedule) return <div className="p-5 text-center text-white">No Data Found</div>;
 
@@ -124,7 +125,8 @@ const MonthlyBreakdownPage = () => {
       }
     }
 
-    const currentPL1 = m === 0 ? 0 : pl1EMI;
+    // ✅ FIX: Respect the PL1 Start Month
+    const currentPL1 = (m >= pl1StartMonth && m > 0) ? pl1EMI : 0;
 
     monthlyData.push({
       month: m,
