@@ -1148,36 +1148,59 @@ const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + per
     };
 
     const handleAddProperty = () => {
-        // 1. FIX: Find the highest ID currently in the list
-        // If list is empty, start at 0 (so next is 1). If not, take the max ID found.
+        // 1. Find max ID
         const maxId = propertyData.properties.reduce((max, prop) => (prop.id > max ? prop.id : max), 0);
-
-        // 2. Generate new unique ID
         const newId = maxId + 1;
 
+        // 2. Create the new property (Empty fields)
         const newProperty = {
             id: newId,
-            size: 1000,
             name: `Property ${newId}`,
             location: '',
-            // rating: 4.0, // (Optional based on your existing object structure)
-            // isHighlighted: false,
-            possessionMonths: 24
+            size: '',
+            possessionMonths: '',
+            rating: 0,
+            isHighlighted: false,
         };
 
+        // 3. Update Property List
         setPropertyData(prev => ({
             ...prev,
             properties: [...prev.properties, newProperty]
+        }));
+
+        // ✅ THE FIX: Automatically Select the New Property for Analysis
+        // This ensures the "Next" button validates THIS card, not the previous one.
+        setUserSelections(prev => ({
+            ...prev,
+            selectedPropertyId: newId,
+            selectedPropertySize: '', // Reset size logic for the new entry
+            scenarioSize: ''
         }));
     };
 
     const handleRemoveProperty = (id) => {
         if (propertyData.properties.length <= 1) return;
 
-        setPropertyData(prev => ({
-            ...prev,
-            properties: prev.properties.filter(prop => prop.id !== id)
-        }));
+        setPropertyData(prev => {
+            const updatedList = prev.properties.filter(prop => prop.id !== id);
+            
+            // ✅ THE FIX: If we deleted the ACTIVE property, select the first available one
+            if (id === userSelections.selectedPropertyId) {
+                const fallbackProp = updatedList[0];
+                setUserSelections(sel => ({
+                    ...sel,
+                    selectedPropertyId: fallbackProp.id,
+                    selectedPropertySize: fallbackProp.size,
+                    scenarioSize: fallbackProp.size
+                }));
+            }
+            
+            return {
+                ...prev,
+                properties: updatedList
+            };
+        });
     };
 
     const handleAddExitPriceScenario = () => {
