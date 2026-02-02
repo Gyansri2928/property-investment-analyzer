@@ -2,6 +2,10 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useNavigate, useLocation } from 'react-router-dom'; // Add this import
 import './PropertyComparison.css';
+// Add these imports at the top of PropertyComparisonDesktop.js
+import { auth, db, loginWithGoogle, logoutUser } from '../firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { collection, addDoc, query, where, getDocs, deleteDoc, doc, orderBy } from 'firebase/firestore';
 
 // ===================== CONSTANTS =====================
 // ... existing DEFAULT_PROPERTY constant ...
@@ -488,6 +492,124 @@ const PropertyComparisonDesktop = () => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }, [activeTab]);
 
+    // ===================== FIREBASE INTEGRATION START =====================
+
+    // 1. Auth & Data State
+    const [user, setUser] = useState(null); // Tracks if user is logged in
+    const [showSavedDrawer, setShowSavedDrawer] = useState(false);
+    const [savedScenarios, setSavedScenarios] = useState([]); // Stores the list from Cloud
+    const [isLoadingData, setIsLoadingData] = useState(false);
+
+    // 2. Listen for Login/Logout (Auto-Run)
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+            setUser(currentUser);
+            if (currentUser) {
+                // User logged in? Fetch their data immediately.
+                fetchUserScenarios(currentUser.uid);
+            } else {
+                // User logged out? Clear the screen.
+                setSavedScenarios([]);
+            }
+        });
+        return () => unsubscribe();
+    }, []);
+
+    // 3. Helper: Fetch Data from Firestore
+    const fetchUserScenarios = async (uid) => {
+        setIsLoadingData(true);
+        try {
+            // Query: Give me scenarios where userId == my ID
+            const q = query(
+                collection(db, "scenarios"),
+                where("userId", "==", uid),
+                orderBy("timestamp", "desc") // Sort by newest
+            );
+
+            const querySnapshot = await getDocs(q);
+            const loadedData = querySnapshot.docs.map(doc => ({
+                id: doc.id, // We need this ID to delete it later
+                ...doc.data()
+            }));
+            setSavedScenarios(loadedData);
+        } catch (error) {
+            console.error("Error loading data:", error);
+            // Fallback if 'orderBy' index isn't ready yet
+            if (error.code === 'failed-precondition') {
+                const qSimple = query(collection(db, "scenarios"), where("userId", "==", uid));
+                const snap = await getDocs(qSimple);
+                setSavedScenarios(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            }
+        }
+        setIsLoadingData(false);
+    };
+
+    // 4. Action: Save to Cloud
+    const handleSaveScenario = async () => {
+        if (!user) {
+            const confirmLogin = window.confirm("You need to be signed in to save to the cloud. Sign in with Google now?");
+            if (confirmLogin) loginWithGoogle();
+            return;
+        }
+
+        // Prepare the data packet
+        const currentProp = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId) || propertyData.properties[0];
+
+        const newScenario = {
+            userId: user.uid, // Security Link
+            timestamp: new Date().toISOString(),
+            name: currentProp.name || "Untitled Property",
+            location: currentProp.location || "Unknown Location",
+            // Save Key Metrics for the preview card
+            metrics: {
+                totalCost: calculatedData.detailedBreakdown.totalCost,
+                roi: calculatedData.detailedBreakdown.roi,
+                netProfit: calculatedData.detailedBreakdown.netGainLoss,
+                years: calculatedData.detailedBreakdown.years
+            },
+            // Save Full Inputs so we can reload them
+            data: propertyData,
+            selections: userSelections
+        };
+
+        try {
+            // Push to Firebase
+            const docRef = await addDoc(collection(db, "scenarios"), newScenario);
+
+            // Update local list instantly (so we don't have to wait for a refresh)
+            setSavedScenarios(prev => [{ id: docRef.id, ...newScenario }, ...prev]);
+            alert("✅ Saved to your Saved Properties!");
+        } catch (e) {
+            console.error("Error adding document: ", e);
+            alert("Error saving data. Check console.");
+        }
+    };
+
+    // 5. Action: Delete from Cloud
+    const handleDeleteScenario = async (id) => {
+        if (!window.confirm("Delete this property from your Saved Properties?")) return;
+
+        try {
+            await deleteDoc(doc(db, "scenarios", id));
+            setSavedScenarios(prev => prev.filter(item => item.id !== id));
+        } catch (e) {
+            console.error("Error deleting: ", e);
+            alert("Failed to delete.");
+        }
+    };
+
+    // 6. Action: Load Data (Same as before)
+    const handleLoadScenario = (scenario) => {
+        if (window.confirm(`Load "${scenario.name}"? Unsaved changes will be lost.`)) {
+            setPropertyData(scenario.data);
+            setUserSelections(scenario.selections);
+            setShowSavedDrawer(false);
+            handleAnalyzeClick();
+        }
+    };
+
+    // ===================== FIREBASE INTEGRATION END =====================
+
     // --- EXPORT FUNCTIONALITY ---
 
     const handlePrintReport = () => {
@@ -960,7 +1082,7 @@ const PropertyComparisonDesktop = () => {
             const prePossessionEMI = personalLoan1EMI + monthlyIDCEMI;
             const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
             // ✅ FIX: Use the precise 'totalIDC' calculated from the schedule loop
-const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + totalIDC;
+            const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + totalIDC;
             let phase1TotalCalc = 0;
             if (paymentPlan === 'clp' && truePrePossessionTotal > 0) {
                 phase1TotalCalc = truePrePossessionTotal;
@@ -1184,7 +1306,7 @@ const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + per
 
         setPropertyData(prev => {
             const updatedList = prev.properties.filter(prop => prop.id !== id);
-            
+
             // ✅ THE FIX: If we deleted the ACTIVE property, select the first available one
             if (id === userSelections.selectedPropertyId) {
                 const fallbackProp = updatedList[0];
@@ -1195,7 +1317,7 @@ const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + per
                     scenarioSize: fallbackProp.size
                 }));
             }
-            
+
             return {
                 ...prev,
                 properties: updatedList
@@ -1742,20 +1864,39 @@ const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + per
                             </p>
                         </div>
 
-                        <button
-                            className="btn btn-success d-flex align-items-center shadow-sm"
-                            onClick={handleResetData}
-                            title="Reset all fields to default values"
-                            style={{
-                                borderRadius: '50px',
-                                padding: '8px 20px',
-                                borderWidth: '2px',
-                                fontWeight: '600'
-                            }}
-                        >
-                            <i className="bi bi-arrow-counterclockwise me-2"></i>
-                            Reset All Inputs
-                        </button>
+                        {/* REPLACEMENT CODE START */}
+                        <div className="d-flex gap-2">
+                            {/* 1. SAVE BUTTON */}
+                            <button
+                                className="btn btn-outline-primary d-flex align-items-center shadow-sm rounded-pill px-3"
+                                onClick={handleSaveScenario}
+                                title="Save this scenario"
+                            >
+                                <i className="bi bi-save me-2"></i> Save
+                            </button>
+
+                            {/* 2. DRAWER TRIGGER (The Missing Button!) */}
+                            <button
+                                className="btn btn-primary d-flex align-items-center shadow-sm rounded-pill px-3 position-relative"
+                                onClick={() => setShowSavedDrawer(true)}
+                            >
+                                <i className="bi bi-folder2-open me-2"></i> My Properties
+                                {savedScenarios.length > 0 && (
+                                    <span className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger border border-light">
+                                        {savedScenarios.length}
+                                    </span>
+                                )}
+                            </button>
+
+                            {/* 3. RESET BUTTON (Keep this) */}
+                            <button
+                                className="btn btn-success d-flex align-items-center shadow-sm rounded-pill px-3"
+                                onClick={handleResetData}
+                            >
+                                <i className="bi bi-arrow-counterclockwise me-2"></i> Reset All Inputs
+                            </button>
+                        </div>
+                        {/* REPLACEMENT CODE END */}
                     </div>
                     {/* Stepper Header */}
                     <div className="px-lg-5 mt-5">
@@ -4687,6 +4828,152 @@ const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + per
             navRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     };
+    const renderSavedPropertiesDrawer = () => {
+        if (!showSavedDrawer) return null;
+
+        return (
+            <>
+                <div
+                    className="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50"
+                    style={{ zIndex: 1045 }}
+                    onClick={() => setShowSavedDrawer(false)}
+                ></div>
+
+                <div
+                    className="position-fixed top-0 end-0 h-100 bg-white shadow-lg d-flex flex-column"
+                    style={{ zIndex: 1050, width: '400px', maxWidth: '85vw' }}
+                >
+                    {/* === HEADER === */}
+                    <div className="p-4 border-bottom bg-light">
+                        <div className="d-flex justify-content-between align-items-center mb-0">
+                            <div>
+                                <h5 className="mb-1 fw-bold">
+                                    <i className="bi bi-buildings me-2"></i>
+                                    Saved Properties
+                                </h5>
+                                {user && (
+                                    <small className="text-success d-flex align-items-center" style={{ fontSize: '0.75rem' }}>
+                                        <i className="bi bi-cloud-check-fill me-1"></i>
+                                        Synced as {user.displayName || user.email?.split('@')[0]}
+                                    </small>
+                                )}
+                            </div>
+                            <button className="btn-close" onClick={() => setShowSavedDrawer(false)}></button>
+                        </div>
+
+                        {!user && (
+                            <div className="mt-3 text-center p-3 bg-white rounded border border-warning">
+                                <p className="small mb-2 text-muted">Sign in to view your saved properties</p>
+                                <button onClick={loginWithGoogle} className="btn btn-primary w-100 btn-sm shadow-sm">
+                                    <i className="bi bi-google me-2"></i> Sign In with Google
+                                </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* === LIST BODY === */}
+                    <div className="flex-grow-1 overflow-auto p-3" style={{ background: '#f8f9fa' }}>
+                        {isLoadingData ? (
+                            <div className="text-center mt-5">
+                                <div className="spinner-border text-primary" role="status"></div>
+                                <p className="small text-muted mt-2">Syncing...</p>
+                            </div>
+                        ) : !user ? (
+                            <div className="text-center text-muted mt-5 opacity-50">
+                                <i className="bi bi-lock-fill fs-1"></i>
+                                <p className="mt-2 small">Your portfolio is safe in the cloud.<br />Sign in to access it.</p>
+                            </div>
+                        ) : savedScenarios.length === 0 ? (
+                            <div className="text-center text-muted mt-5 opacity-50">
+                                <i className="bi bi-inbox fs-1"></i>
+                                <p className="mt-2">No saved properties yet.<br />Analyze a property and click "Save".</p>
+                            </div>
+                        ) : (
+                            <div className="d-flex flex-column gap-3">
+                                {savedScenarios.map((item) => {
+                                    // 1. EXTRACT PROPERTY DATA TO GET SIZE
+                                    const savedProp = item.data?.properties?.find(p => p.id === item.selections.selectedPropertyId)
+                                        || item.data?.properties?.[0]
+                                        || {};
+
+                                    // 2. DO THE MATH (Rate * Size)
+                                    const size = parseFloat(savedProp.size) || 0;
+                                    const exitRate = parseFloat(item.selections.selectedExitPrice) || 0;
+                                    const totalSellValue = size > 0 ? (exitRate * size) : exitRate;
+                                    // (Fallback: if size is 0/undefined, just show the rate)
+
+                                    return (
+                                        <div key={item.id} className="card border-0 shadow-sm hover-shadow transition-all">
+                                            <div className="card-body">
+
+                                                {/* Header */}
+                                                <div className="d-flex justify-content-between align-items-start mb-1">
+                                                    <div>
+                                                        <h6 className="fw-bold mb-0 text-primary text-truncate" style={{ maxWidth: '200px' }} title={item.name}>{item.name}</h6>
+                                                        <small className="text-muted d-block text-truncate" style={{ maxWidth: '220px', fontSize: '0.75rem' }}>
+                                                            <i className="bi bi-geo-alt me-1"></i>{item.location}
+                                                            {size > 0 && <span className="ms-1 border-start ps-1">{size} sq.ft</span>}
+                                                        </small>
+                                                    </div>
+                                                    <small className="text-muted text-nowrap" style={{ fontSize: '0.65rem' }}>
+                                                        {new Date(item.timestamp).toLocaleDateString()}
+                                                    </small>
+                                                </div>
+
+                                                {/* Price Context Row */}
+                                                <div className="d-flex align-items-center justify-content-between bg-light rounded px-2 py-1 mb-2 mt-2 border border-light" style={{ fontSize: '0.7rem' }}>
+                                                    <div className="text-muted d-flex align-items-center">
+                                                        <span className="opacity-50 me-1">Buy:</span>
+                                                        <span className="fw-bold text-dark">{formatLakhs(item.metrics.totalCost)}</span>
+                                                    </div>
+                                                    <div className="text-muted d-flex align-items-center">
+                                                        <span className="opacity-25 mx-1">|</span>
+                                                    </div>
+                                                    <div className="text-muted d-flex align-items-center">
+                                                        <span className="opacity-50 me-1">Sell:</span>
+                                                        {/* ✅ DISPLAY CALCULATED TOTAL */}
+                                                        <span className="fw-bold text-dark">{formatLakhs(totalSellValue)}</span>
+                                                    </div>
+                                                </div>
+
+                                                {/* Metrics */}
+                                                <div className="row g-2 mb-3">
+                                                    <div className="col-6">
+                                                        <div className="p-2 bg-white rounded border shadow-sm">
+                                                            <small className="d-block text-muted" style={{ fontSize: '0.6rem' }}>ROI</small>
+                                                            <span className="fw-bold text-success">{formatPercent(item.metrics.roi)}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-6">
+                                                        <div className="p-2 bg-white rounded border shadow-sm">
+                                                            <small className="d-block text-muted" style={{ fontSize: '0.6rem' }}>Net Profit</small>
+                                                            <span className={`fw-bold ${item.metrics.netProfit >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontSize: '0.8rem' }}>
+                                                                {formatLakhs(item.metrics.netProfit)}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                {/* Actions */}
+                                                <div className="d-flex gap-2">
+                                                    <button className="btn btn-sm btn-outline-primary flex-grow-1" onClick={() => handleLoadScenario(item)}>
+                                                        Load
+                                                    </button>
+                                                    <button className="btn btn-sm btn-outline-danger px-3" onClick={() => handleDeleteScenario(item.id)}>
+                                                        <i className="bi bi-trash"></i>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </>
+        );
+    };
 
     return (
         <div className="property-comparison">
@@ -4769,6 +5056,7 @@ const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + per
                 </div>
             </div>
             {renderLoadingOverlay()}
+            {renderSavedPropertiesDrawer()}
             {renderPreviewModal()}
             {renderPrintView()}
         </div>

@@ -57,6 +57,7 @@ const MonthlyBreakdownPage = () => {
   } else {
     actualHLStartMonth = fundingEndMonth + 1;
   }
+  const effectivePL1Start = parseInt(pl1StartMonth);
 
   const tableEndMonth = parseInt(possessionMonths);
 
@@ -126,7 +127,7 @@ const MonthlyBreakdownPage = () => {
     }
 
     // ✅ FIX: Respect the PL1 Start Month
-    const currentPL1 = (m >= pl1StartMonth && m > 0) ? pl1EMI : 0;
+    const currentPL1 = (m >= effectivePL1Start) ? pl1EMI : 0;
 
     monthlyData.push({
       month: m,
