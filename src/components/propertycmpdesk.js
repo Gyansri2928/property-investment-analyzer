@@ -1928,7 +1928,7 @@ const PropertyComparisonDesktop = () => {
                                                     <div key={property.id} className="col-12 col-md-6 col-lg-5 col-xl-4">
                                                         <div className="card h-100 shadow-sm border-2 me-4">
                                                             <div className="card-header bg-white d-flex justify-content-between align-items-center py-2">
-                                                                <span className="badge bg-primary px-3 py-2">Property #{property.id}</span>
+                                                                <span className="badge bg-primary px-3 py-2">Property #{property.id || 1}</span>
                                                                 {propertyData.properties.length > 1 && (
                                                                     <button
                                                                         className="btn btn-outline-danger btn-sm rounded-circle"
