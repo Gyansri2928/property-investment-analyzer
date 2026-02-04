@@ -139,8 +139,9 @@ const renderStatCard = (label, value, subtext, color, colSize = 4) => (
 );
 // Helper: Converts empty strings or invalid numbers to 0 for calculations
 const getSafeValue = (value) => {
-    if (value === '' || value === null || isNaN(value)) return 0;
-    return parseFloat(value);
+    if (value === undefined || value === null || value === '') return 0;
+    const num = parseFloat(value);
+    return isNaN(num) ? 0 : num;
 };
 const renderTimelineCard = (title, icon, color, mainEMI, period, duration, componentsJSX, totalAmount, calcText, footerSubtitle, extraHeader = null, extraFooter = null) => (
     <div className="col-md-6">
@@ -443,16 +444,17 @@ const PropertyComparisonDesktop = () => {
         }
     });
 
-    // ⬇️ NEW: Auto-populate Exit Price based on Holding Period logic
+   // ⬇️ NEW: Auto-populate Exit Price based on Holding Period logic
     useEffect(() => {
         if (currentStep === 4) {
-            const purchasePrice = parseFloat(propertyData.purchasePrice) || 0;
+            // ✅ FIX: Safe access to purchase price
+            const purchasePrice = getSafeValue(propertyData.purchasePrice);
 
             // Only run if we have a Purchase Price and the Exit Price is currently empty/zero
             if (purchasePrice > 0 && (!userSelections.selectedExitPrice || userSelections.selectedExitPrice === 0)) {
 
-                // 1. Determine Duration in Years (Handle months/years unit)
-                let years = parseFloat(propertyData.assumptions.investmentPeriod) || 0;
+                // ✅ FIX: Safe access to investment period
+                let years = getSafeValue(propertyData.assumptions.investmentPeriod);
                 if (propertyData.assumptions.holdingPeriodUnit === 'months') {
                     years = years / 12;
                 }
@@ -463,15 +465,15 @@ const PropertyComparisonDesktop = () => {
                 if (years < 1) {
                     increment = 500;
                 } else if (years >= 1 && years < 2) {
-                    increment = 1000; // For "1 year"
+                    increment = 1000;
                 } else if (years >= 2 && years < 3) {
-                    increment = 2000; // For "2 year"
+                    increment = 2000;
                 } else if (years >= 3 && years < 4) {
-                    increment = 2500; // For "3 year"
+                    increment = 2500;
                 } else if (years >= 4 && years < 5) {
-                    increment = 3000; // For "4 year"
+                    increment = 3000;
                 } else {
-                    increment = 3500; // For "=> 5 year"
+                    increment = 3500;
                 }
 
                 // 3. Set the calculated price
@@ -817,6 +819,9 @@ const PropertyComparisonDesktop = () => {
         // 1. Internal Helper: Performs the core financial math
         const calculateFinancials = (propertySize, exitPrice, years) => {
             // ... (Inputs extraction and setup remains the same) ...
+            const safeSize = getSafeValue(sizeInput);
+            const safeExitPrice = getSafeValue(exitPriceInput);
+            const safeYearsInput = getSafeValue(yearsInput);
             const { purchasePrice, otherCharges, stampDuty, gstPercentage, assumptions, paymentPlan } = propertyData;
 
             const selectedProperty = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)
@@ -825,15 +830,15 @@ const PropertyComparisonDesktop = () => {
             const periodUnit = propertyData.assumptions.holdingPeriodUnit || 'years';
             let totalHoldingMonths;
             if (periodUnit === 'months') {
-                totalHoldingMonths = parseFloat(years) || 0;
+                totalHoldingMonths = safeYearsInput;
             } else {
-                totalHoldingMonths = (parseFloat(years) || 0) * 12;
+                totalHoldingMonths = safeYearsInput * 12;
             }
 
             const valYears = totalHoldingMonths / 12;
             const displayYears = Math.round(valYears * 100) / 100;
             const possessionMonths = getSafeValue(selectedProperty?.possessionMonths) || 0;
-            const baseCost = propertySize * getSafeValue(purchasePrice);
+            const baseCost = safeSize * getSafeValue(purchasePrice);
             const extraCharges = getSafeValue(otherCharges);
             const agreementValue = baseCost;
             const stampDutyCost = agreementValue * (getSafeValue(stampDuty) / 100);
@@ -1070,7 +1075,7 @@ const PropertyComparisonDesktop = () => {
 
             const totalLoanOutstanding = homeLoanOutstanding + personalLoan1Outstanding + personalLoan2Outstanding;
             const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC;
-            const saleValue = propertySize * exitPrice;
+            const saleValue = safeSize * safeExitPrice;
             const leftoverCash = saleValue - totalLoanOutstanding;
             const trueNetProfit = leftoverCash - totalEMIPaid - downPaymentAmount;
             const totalActualInvestment = downPaymentAmount + totalEMIPaid;
@@ -1330,17 +1335,16 @@ const PropertyComparisonDesktop = () => {
 
         // 1. If scenarios exist, take the max of those
         if (userSelections.scenarioExitPrices.length > 0) {
-            // Use map/parseFloat to ensure we handle any temporary empty strings safely
-            const existingValues = userSelections.scenarioExitPrices.map(p => parseFloat(p) || 0);
+            const existingValues = userSelections.scenarioExitPrices.map(p => getSafeValue(p)); // ✅ FIX: Use getSafeValue
             baseline = Math.max(...existingValues);
         }
         // 2. If no scenarios, take the "Selected Exit Price"
         else if (userSelections.selectedExitPrice) {
-            baseline = parseFloat(userSelections.selectedExitPrice);
+            baseline = getSafeValue(userSelections.selectedExitPrice); // ✅ FIX
         }
         // 3. Fallback to Purchase Price
         else {
-            baseline = parseFloat(propertyData.purchasePrice) || 0;
+            baseline = getSafeValue(propertyData.purchasePrice); // ✅ FIX
         }
 
         // Add 500 increment
@@ -2055,7 +2059,7 @@ const PropertyComparisonDesktop = () => {
                                                 <div className="form-control bg-light text-secondary">
                                                     {/* Calculate display value on the fly based on inputs */}
                                                     {(() => {
-                                                        const size = userSelections.selectedPropertySize || 0;
+                                                        const size = getSafeValue(userSelections.selectedPropertySize);
                                                         const price = getSafeValue(propertyData.purchasePrice);
                                                         const others = getSafeValue(propertyData.otherCharges);
                                                         const gst = getSafeValue(propertyData.gstPercentage);
