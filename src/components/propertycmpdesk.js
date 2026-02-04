@@ -19,7 +19,7 @@ const INITIAL_PROPERTY_DATA = {
     exitPrices: [],
     properties: [
         {
-            id: '',
+            id: 1,
             size: '',
             name: '',
             location: '',
