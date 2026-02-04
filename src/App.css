@@ -160,6 +160,9 @@ body {
 .enhanced-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+  -webkit-font-smoothing: subpixel-antialiased; 
+  backface-visibility: hidden;       /* Prevents flickering/blurring */
+  transform: translateZ(0);
 }
 
 .enhanced-card .card-header {
