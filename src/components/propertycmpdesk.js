@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import * as XLSX from 'xlsx';
 import { useNavigate, useLocation } from 'react-router-dom'; // Add this import
 import './PropertyComparison.css';
+import axios from 'axios';
 // Add these imports at the top of PropertyComparisonDesktop.js
 import { auth, db, loginWithGoogle, logoutUser } from '../firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -442,6 +443,30 @@ const PropertyComparisonDesktop = () => {
             return INITIAL_USER_SELECTIONS;
         }
     });
+    // 👇👇 PASTE THIS BLOCK HERE 👇👇
+    // ✅ AUTO-RESET: Automatically fixes blank/crash screen for new users or Incognito
+    // ✅ AUTO-RESET: Fixes "Blank Screen" by ensuring valid data exists
+    useEffect(() => {
+        // 1. Check if data is corrupted
+        const isPropertiesBroken = !propertyData.properties || propertyData.properties.length === 0;
+
+        // 2. Check if the "Selected Property" actually exists in the list
+        const selectedProp = propertyData.properties?.find(p => p.id === userSelections.selectedPropertyId);
+        const isSelectionBroken = !selectedProp;
+
+        if (isPropertiesBroken || isSelectionBroken) {
+            console.log("⚠️ Data mismatch detected. Auto-resetting to clean state...");
+
+            // Wipe everything and force valid defaults
+            localStorage.removeItem('propertyCalc_data');
+            localStorage.removeItem('propertyCalc_selections');
+
+            setPropertyData(INITIAL_PROPERTY_DATA);
+            setUserSelections(INITIAL_USER_SELECTIONS);
+            setCurrentStep(1);
+        }
+    }, []); // Runs once on load // Empty dependency array = Runs once when the page loads
+    // 👆👆 END PASTE 👆👆
 
     // ⬇️ NEW: Auto-populate Exit Price based on Holding Period logic
     useEffect(() => {
@@ -545,6 +570,7 @@ const PropertyComparisonDesktop = () => {
     };
 
     // 4. Action: Save to Cloud
+    // 4. Action: Save to Cloud
     const handleSaveScenario = async () => {
         if (!user) {
             const confirmLogin = window.confirm("You need to be signed in to save to the cloud. Sign in with Google now?");
@@ -552,31 +578,37 @@ const PropertyComparisonDesktop = () => {
             return;
         }
 
+        // ✅ FIX 1: Prevent saving empty/zero data
+        if (!calculatedData.detailedBreakdown || calculatedData.detailedBreakdown.totalCost === 0) {
+            alert("Please click 'Analyze Property' to generate results before saving.");
+            return;
+        }
+
         // Prepare the data packet
         const currentProp = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId) || propertyData.properties[0];
 
         const newScenario = {
-            userId: user.uid, // Security Link
+            userId: user.uid,
             timestamp: new Date().toISOString(),
             name: currentProp.name || "Untitled Property",
             location: currentProp.location || "Unknown Location",
-            // Save Key Metrics for the preview card
+
+            // ✅ FIX 2: Added 'outstanding' to saved metrics
             metrics: {
                 totalCost: calculatedData.detailedBreakdown.totalCost,
                 roi: calculatedData.detailedBreakdown.roi,
                 netProfit: calculatedData.detailedBreakdown.netGainLoss,
-                years: calculatedData.detailedBreakdown.years
+                years: calculatedData.detailedBreakdown.years,
+                outstanding: calculatedData.detailedBreakdown.totalLoanOutstanding // <--- ADDED THIS
             },
+
             // Save Full Inputs so we can reload them
             data: propertyData,
             selections: userSelections
         };
 
         try {
-            // Push to Firebase
             const docRef = await addDoc(collection(db, "scenarios"), newScenario);
-
-            // Update local list instantly (so we don't have to wait for a refresh)
             setSavedScenarios(prev => [{ id: docRef.id, ...newScenario }, ...prev]);
             alert("✅ Saved to your Saved Properties!");
         } catch (e) {
@@ -758,488 +790,13 @@ const PropertyComparisonDesktop = () => {
             alert("Property details reset. Loan settings preserved.");
         }
     };
-    const calculatedData = useMemo(() => {
-        // New Helper: Handles "Manual" Home Loan Strategy
-        const calculateManualStrategy = (params) => {
-            const {
-                homeLoanAmount,
-                manualStartMonth,
-                possessionMonths,
-                totalHoldingMonths,
-                idcSchedule,
-                hlRate,
-                hlTerm,
-                personalLoan1Amount,
-                personalLoan1EMI, // Pre-calculated
-                assumptions
-            } = params;
-
-            // 1. Calculate Full Fixed EMI
-            let fullHL_EMI = 0;
-            if (homeLoanAmount > 0 && hlTerm > 0) {
-                const r = hlRate / 12 / 100;
-                const n = hlTerm * 12;
-                fullHL_EMI = (homeLoanAmount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-            }
-
-            let runningTotalOutflow = 0;
-            let runningTotalHLPaid = 0;
-            const loopEnd = Math.min(totalHoldingMonths || possessionMonths, possessionMonths);
-
-            // 2. Simple Loop: Payment based on "Start Month"
-            for (let m = 1; m <= loopEnd; m++) {
-                let monthlyHLPayment = 0;
-
-                // Logic: If current month >= user's start month, pay Full EMI.
-                // Before that? Usually 0 (Moratorium) or Interest (Standard).
-                // Based on your requirement ("Only HL EMI"), we assume 0 before start.
-                if (m >= manualStartMonth) {
-                    monthlyHLPayment = fullHL_EMI;
-                }
-
-                runningTotalHLPaid += monthlyHLPayment;
-                runningTotalOutflow += (monthlyHLPayment + personalLoan1EMI);
-            }
-
-            // 3. Return Simplified Data
-            return {
-                totalIDC: 0, // No separate "IDC" cost to show, it's all EMI
-                minIDCEMI: fullHL_EMI, // Min and Max are just the EMI
-                maxIDCEMI: fullHL_EMI,
-                monthlyIDCEMI: fullHL_EMI, // Average is just the EMI
-
-                idcSchedule: idcSchedule,
-
-                // Return the Total Outflow calculated in the loop
-                truePrePossessionTotal: runningTotalOutflow
-            };
-        };
-        // 1. Internal Helper: Performs the core financial math
-        const calculateFinancials = (propertySize, exitPrice, years) => {
-            // ... (Inputs extraction and setup remains the same) ...
-            const { purchasePrice, otherCharges, stampDuty, gstPercentage, assumptions, paymentPlan } = propertyData;
-
-            const selectedProperty = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)
-                || propertyData.properties[0] || {};
-
-            const periodUnit = propertyData.assumptions.holdingPeriodUnit || 'years';
-            let totalHoldingMonths;
-            if (periodUnit === 'months') {
-                totalHoldingMonths = parseFloat(years) || 0;
-            } else {
-                totalHoldingMonths = (parseFloat(years) || 0) * 12;
-            }
-
-            const valYears = totalHoldingMonths / 12;
-            const displayYears = Math.round(valYears * 100) / 100;
-            const possessionMonths = getSafeValue(selectedProperty?.possessionMonths) || 0;
-            const baseCost = propertySize * getSafeValue(purchasePrice);
-            const extraCharges = getSafeValue(otherCharges);
-            const agreementValue = baseCost;
-            const stampDutyCost = agreementValue * (getSafeValue(stampDuty) / 100);
-            const gstCost = agreementValue * (getSafeValue(gstPercentage) / 100);
-            const totalCost = baseCost;
-
-            const constructionPeriodMonths = paymentPlan === 'clp'
-                ? (getSafeValue(assumptions.clpDurationYears) * 12)
-                : possessionMonths;
-
-            let lastDemandMonth = possessionMonths;
-            if (paymentPlan === 'clp') {
-                const explicitLast = getSafeValue(assumptions.lastBankDisbursementMonth);
-                const constructionEnd = getSafeValue(assumptions.clpDurationYears) * 12;
-                lastDemandMonth = explicitLast > 0 ? explicitLast : (constructionEnd > 0 ? constructionEnd : possessionMonths);
-            }
-
-            const hlMode = assumptions.homeLoanStartMode || 'default';
-            const hlInputValue = getSafeValue(assumptions.homeLoanStartMonth);
-            let realHomeLoanStartMonth;
-
-            if (hlMode === 'manual') {
-                realHomeLoanStartMonth = hlInputValue;
-            } else {
-                realHomeLoanStartMonth = lastDemandMonth + hlInputValue + 1;
-            }
-
-            let homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare;
-
-            if (paymentPlan === 'clp') {
-                homeLoanShare = 80; personalLoan1Share = 10; personalLoan2Share = 10; downPaymentShare = 0;
-            } else if (paymentPlan === '20-80') {
-                homeLoanShare = 80; personalLoan1Share = 20; personalLoan2Share = 0; downPaymentShare = 0;
-            } else if (paymentPlan === '40-60') {
-                homeLoanShare = 60; personalLoan1Share = 40; personalLoan2Share = 0; downPaymentShare = 0;
-            } else if (paymentPlan === 'rtm') {
-                homeLoanShare = 80; personalLoan1Share = 20; personalLoan2Share = 0; downPaymentShare = 0;
-            } else {
-                personalLoan1Share = getSafeValue(assumptions.personalLoan1Share);
-                personalLoan2Share = getSafeValue(assumptions.personalLoan2Share);
-                downPaymentShare = getSafeValue(assumptions.downPaymentShare);
-                homeLoanShare = getSafeValue(assumptions.homeLoanShare);
-            }
-
-            const homeLoanAmount = totalCost * (homeLoanShare / 100);
-            const pl1StartMonth = getSafeValue(assumptions.personalLoan1StartMonth);
-            const pl2DelayMonths = getSafeValue(assumptions.personalLoan2StartMonth);
-            // Note: PL2 slider is "Delay after possession", so absolute start is:
-            const pl2AbsoluteStartMonth = possessionMonths + pl2DelayMonths + 1;
-            const personalLoan1Amount = totalCost * (personalLoan1Share / 100);
-            const personalLoan2Amount = totalCost * (personalLoan2Share / 100);
-            const downPaymentAmount = totalCost * (downPaymentShare / 100);
-            const totalCashInvested = downPaymentAmount + personalLoan1Amount + personalLoan2Amount;
-
-            const totalHomeLoanAtCompletion = homeLoanAmount;
-            const homeLoanEMI = homeLoanAmount > 0 ? calculateEMI(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm) : 0;
-            const personalLoan1EMI = personalLoan1Amount > 0 ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term) : 0;
-            const personalLoan2EMI = personalLoan2Amount > 0 ? calculateEMI(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term) : 0;
-
-            const constructionMonths = possessionMonths;
-            let totalIDC = 0;
-            let monthlyIDCEMI = 0;
-            let minIDCEMI = 0;
-            let maxIDCEMI = 0;
-            let idcSchedule = [];
-            let truePrePossessionTotal = 0;
-            let totalLifetimeInterest = 0;
-
-            const isManualMode = assumptions.homeLoanStartMode === 'manual';
-
-            if (paymentPlan === 'clp' && homeLoanAmount > 0) {
-
-                // ============================================================
-                // 1. GENERATE BASE SCHEDULE (Structure Only)
-                // ============================================================
-                const interval = getSafeValue(assumptions.bankDisbursementInterval) || 3;
-                let rawStart = getSafeValue(assumptions.bankDisbursementStartMonth);
-                let startMonth = (rawStart !== undefined && rawStart !== null && rawStart !== '') ? parseInt(rawStart) : 1;
-                const manualCutoff = getSafeValue(assumptions.lastBankDisbursementMonth);
-                const fundingEndMonth = manualCutoff > 0 ? manualCutoff : possessionMonths;
-
-                const calculatedSlabs = Math.floor((fundingEndMonth - startMonth) / interval) + 1;
-                const numberOfSlabs = Math.max(1, calculatedSlabs);
-                const slabAmount = homeLoanAmount / numberOfSlabs;
-                const hlRate = getSafeValue(assumptions.homeLoanRate);
-
-                // Create initial slabs (Interest calculated later)
-                for (let i = 0; i < numberOfSlabs; i++) {
-                    const month = startMonth + (i * interval);
-                    if (month <= fundingEndMonth) {
-                        idcSchedule.push({
-                            slabNo: i + 1,
-                            releaseMonth: month,
-                            amount: slabAmount,
-                            interestCost: 0 // Placeholder, we calculate this accurately below
-                        });
-                    }
-                }
-
-                // ============================================================
-                // 2. EXECUTE STRATEGY (Calculate Exact Costs)
-                // ============================================================
-
-                // Determine the EXACT month interest stops (The month before EMI starts)
-                const idcCutoffMonth = realHomeLoanStartMonth - 1;
-
-                if (isManualMode) {
-                    // MANUAL STRATEGY (Smart Saver)
-                    const manualStart = getSafeValue(assumptions.homeLoanStartMonth);
-                    const mStart = (manualStart !== undefined && manualStart !== null) ? parseInt(manualStart) : 0;
-
-                    const manualResult = calculateManualStrategy({
-                        homeLoanAmount,
-                        manualStartMonth: mStart,
-                        possessionMonths,
-                        totalHoldingMonths,
-                        hlRate,
-                        hlTerm: getSafeValue(assumptions.homeLoanTerm),
-                        personalLoan1Amount,
-                        personalLoan1EMI,
-                        assumptions,
-                        idcSchedule // Pass the schedule structure
-                    });
-
-                    totalIDC = manualResult.totalIDC;
-                    minIDCEMI = manualResult.minIDCEMI;
-                    maxIDCEMI = manualResult.maxIDCEMI;
-                    monthlyIDCEMI = manualResult.monthlyIDCEMI;
-                    truePrePossessionTotal = manualResult.truePrePossessionTotal;
-
-                    // CRITICAL FIX: Ensure the return object uses this value
-                    totalLifetimeInterest = totalIDC;
-
-                } else {
-                    // DEFAULT STRATEGY (Standard CLP)
-
-                    let cumulativeDisbursement = 0;
-                    let runningTotalIDC = 0;
-                    let runningTotalOutflow = 0;
-                    let isFirstIDCPayment = false;
-
-                    if (startMonth === 0) cumulativeDisbursement += slabAmount;
-
-                    const hlTerm = getSafeValue(assumptions.homeLoanTerm);
-                    let fullHL_EMI = 0;
-                    if (homeLoanAmount > 0 && hlTerm > 0) {
-                        const r = hlRate / 12 / 100;
-                        const n = hlTerm * 12;
-                        fullHL_EMI = (homeLoanAmount * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1);
-                    }
-
-                    const loopEnd = Math.min(totalHoldingMonths || possessionMonths, possessionMonths);
-
-                    for (let m = 1; m <= loopEnd; m++) {
-                        // LOGIC UPDATE: IDC Active only until Cutoff Month (e.g. Month 18)
-                        const isPhase1_IDC = m <= fundingEndMonth && m <= idcCutoffMonth;
-
-                        let monthlyHLComponent = 0;
-
-                        if (isPhase1_IDC) {
-                            const isScheduleMonth = (m >= startMonth) && ((m - startMonth) % interval === 0) && (m !== startMonth);
-                            const isStartMonthTrigger = (startMonth !== 0 && m === startMonth);
-
-                            if ((isScheduleMonth || isStartMonthTrigger) && cumulativeDisbursement < (homeLoanAmount - 10)) {
-                                cumulativeDisbursement += slabAmount;
-                                if (cumulativeDisbursement > homeLoanAmount) cumulativeDisbursement = homeLoanAmount;
-                            }
-
-                            // Interest on disbursed amount
-                            monthlyHLComponent = (cumulativeDisbursement * (hlRate / 100)) / 12;
-                            runningTotalIDC += monthlyHLComponent;
-
-                            if (monthlyHLComponent > 0) {
-                                if (!isFirstIDCPayment) {
-                                    minIDCEMI = monthlyHLComponent;
-                                    isFirstIDCPayment = true;
-                                }
-                                maxIDCEMI = monthlyHLComponent;
-                            }
-                        } else {
-                            // Phase 2: EMI Starts (or Gap period)
-                            if (m >= realHomeLoanStartMonth) {
-                                monthlyHLComponent = fullHL_EMI;
-                            } else {
-                                // Gap between IDC end and EMI start (rare)
-                                monthlyHLComponent = (cumulativeDisbursement * (hlRate / 100)) / 12;
-                                runningTotalIDC += monthlyHLComponent;
-                            }
-                        }
-
-                        const monthlyPL1 = (personalLoan1Amount > 0 && m >= pl1StartMonth)
-                            ? calculateEMI(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term)
-                            : 0;
-                        runningTotalOutflow += (monthlyHLComponent + monthlyPL1);
-                    }
-
-                    totalIDC = runningTotalIDC;
-                    truePrePossessionTotal = runningTotalOutflow;
-
-                    // Calculate Average
-                    const activeIDCMonths = Math.min(idcCutoffMonth, fundingEndMonth) - startMonth + 1;
-                    monthlyIDCEMI = activeIDCMonths > 0 ? (totalIDC / activeIDCMonths) : 0;
-
-                    // 3. UPDATE SCHEDULE TABLE WITH CORRECT VALUES
-                    idcSchedule = idcSchedule.map(slab => {
-                        // If slab released AFTER interest cutoff, it costs 0 IDC (straight to EMI)
-                        if (slab.releaseMonth > idcCutoffMonth) return { ...slab, interestCost: 0 };
-
-                        // Interest Duration = Cutoff - Release + 1 (e.g. 18 - 3 + 1 = 16 months)
-                        const monthsOfInterest = Math.max(0, idcCutoffMonth - slab.releaseMonth + 1);
-
-                        return {
-                            ...slab,
-                            interestCost: (slab.amount * (hlRate / 100) / 12) * monthsOfInterest
-                        };
-                    });
-
-                    // CRITICAL FIX: Overwrite the top-level variable so the return statement is correct
-                    totalLifetimeInterest = totalIDC;
-                }
-            }
-
-            // ... (Rest of function remains identical) ...
-            const homeLoanPaymentsMade = Math.max(0, totalHoldingMonths - (realHomeLoanStartMonth - 1));
-            const pl1PaymentsMade = Math.max(0, totalHoldingMonths - assumptions.personalLoan1StartMonth);
-            const pl2PaymentsMade = Math.max(0, totalHoldingMonths - (possessionMonths + assumptions.personalLoan2StartMonth));
-            const homeLoanOutstanding = homeLoanAmount > 0 ? calculateOutstandingAfterPayments(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm, homeLoanPaymentsMade) : 0;
-            const personalLoan1Outstanding = personalLoan1Amount > 0 ? calculateOutstandingAfterPayments(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term, pl1PaymentsMade) : 0;
-            const personalLoan2Outstanding = personalLoan2Amount > 0 ? calculateOutstandingAfterPayments(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term, pl2PaymentsMade) : 0;
-
-            const homeLoanInterestPaid = homeLoanAmount > 0 ? calculateTotalInterestPaid(totalHomeLoanAtCompletion, assumptions.homeLoanRate, assumptions.homeLoanTerm, homeLoanPaymentsMade) : 0;
-            const personalLoan1InterestPaid = personalLoan1Amount > 0 ? calculateTotalInterestPaid(personalLoan1Amount, assumptions.personalLoan1Rate, assumptions.personalLoan1Term, pl1PaymentsMade) : 0;
-            const personalLoan2InterestPaid = personalLoan2Amount > 0 ? calculateTotalInterestPaid(personalLoan2Amount, assumptions.personalLoan2Rate, assumptions.personalLoan2Term, pl2PaymentsMade) : 0;
-
-            const totalLoanOutstanding = homeLoanOutstanding + personalLoan1Outstanding + personalLoan2Outstanding;
-            const totalEMIPaid = (homeLoanEMI * homeLoanPaymentsMade) + (personalLoan1EMI * pl1PaymentsMade) + (personalLoan2EMI * pl2PaymentsMade) + totalIDC;
-            const saleValue = propertySize * exitPrice;
-            const leftoverCash = saleValue - totalLoanOutstanding;
-            const trueNetProfit = leftoverCash - totalEMIPaid - downPaymentAmount;
-            const totalActualInvestment = downPaymentAmount + totalEMIPaid;
-            const roi = totalActualInvestment > 0 ? (trueNetProfit / totalActualInvestment) * 100 : 0;
-            const netGainLoss = trueNetProfit;
-
-            const prePossessionMonths = Math.min(totalHoldingMonths, possessionMonths);
-            const postPossessionMonths = Math.max(0, totalHoldingMonths - possessionMonths);
-            const prePossessionEMI = personalLoan1EMI + monthlyIDCEMI;
-            const postPossessionEMI = homeLoanEMI + personalLoan1EMI + personalLoan2EMI;
-            // ✅ FIX: Use the precise 'totalIDC' calculated from the schedule loop
-            const totalInterestPaid = homeLoanInterestPaid + personalLoan1InterestPaid + personalLoan2InterestPaid + totalIDC;
-            let phase1TotalCalc = 0;
-            if (paymentPlan === 'clp' && truePrePossessionTotal > 0) {
-                phase1TotalCalc = truePrePossessionTotal;
-            } else {
-                // For Non-CLP or Fallback:
-                // Only count PL1 months where the Start Month has passed
-                const pl1ActiveMonthsPhase1 = Math.max(0, prePossessionMonths - Math.max(0, pl1StartMonth - 1));
-                phase1TotalCalc = (monthlyIDCEMI * prePossessionMonths) + (personalLoan1EMI * pl1ActiveMonthsPhase1);
-            }
-
-            // 2. Calculate Actual Phase 2 Total (Respecting PL1/PL2 Delays)
-            const hlPostTotal = homeLoanEMI * postPossessionMonths;
-
-            // PL1 in Phase 2:
-            // If PL1 starts very late (e.g. Month 40), it might not even be active at the start of Phase 2 (Month 25).
-            const pl1DelayInPhase2 = Math.max(0, pl1StartMonth - (possessionMonths + 1));
-            const pl1PostMonths = Math.max(0, postPossessionMonths - pl1DelayInPhase2);
-            const pl1PostTotal = personalLoan1EMI * pl1PostMonths;
-
-            // PL2 in Phase 2:
-            // PL2 starts only after "Possession + Delay".
-            const pl2PostMonths = Math.max(0, postPossessionMonths - pl2DelayMonths);
-            const pl2PostTotal = personalLoan2EMI * pl2PostMonths;
-
-            const phase2TotalCalc = hlPostTotal + pl1PostTotal + pl2PostTotal;
-
-            return {
-                minIDCEMI, maxIDCEMI, idcSchedule, propertySize, totalCost, totalCashInvested, totalLoanOutstanding,
-                homeLoanEMI, personalLoan1EMI, personalLoan2EMI, gstCost,
-                homeLoanAmount, personalLoan1Amount, personalLoan2Amount, downPaymentAmount,
-                totalHomeLoanAtCompletion, homeLoanOutstanding, personalLoan1Outstanding, personalLoan2Outstanding,
-                totalInterestPaid, totalIDC: paymentPlan === 'clp' ? totalLifetimeInterest : totalIDC,
-                monthlyIDCEMI,
-                homeLoanInterestPaid, personalLoan1InterestPaid, personalLoan2InterestPaid,
-                homeLoanEMIPaid: homeLoanEMI * homeLoanPaymentsMade,
-                personalLoan1EMIPaid: personalLoan1EMI * pl1PaymentsMade,
-                personalLoan2EMIPaid: personalLoan2EMI * pl2PaymentsMade,
-                totalEMIPaid, homeLoanPaymentsMade, pl1PaymentsMade, pl2PaymentsMade,
-                saleValue, leftoverCash, stampDutyCost, netGainLoss, roi, exitPrice,
-                homeLoanShare, personalLoan1Share, personalLoan2Share, downPaymentShare,
-                years: displayYears,
-                hasHomeLoan: homeLoanAmount > 0,
-                hasPersonalLoan1: personalLoan1Amount > 0,
-                hasPersonalLoan2: personalLoan2Amount > 0,
-                hasDownPayment: downPaymentAmount > 0,
-                hasIDC: totalIDC > 0,
-                homeLoanStartMonth: realHomeLoanStartMonth,
-                pl1StartMonth: assumptions.personalLoan1StartMonth,
-                pl2StartMonth: possessionMonths,
-                homeLoanSelectedMonths: assumptions.homeLoanStartMonth,
-                pl1SelectedMonths: assumptions.personalLoan1StartMonth,
-                pl2SelectedMonths: assumptions.personalLoan2StartMonth,
-                possessionMonths: possessionMonths,
-                totalHoldingMonths,
-                prePossessionMonths,
-                postPossessionMonths,
-                prePossessionEMI,
-                postPossessionEMI,
-                prePossessionTotal: phase1TotalCalc,
-                postPossessionTotal: phase2TotalCalc,
-                prePossessionComponents: {
-                    pl1EMI: personalLoan1EMI,
-                    monthlyIDCEMI,
-                    total: prePossessionEMI
-                },
-                constructionMonths: paymentPlan === 'clp' ? assumptions.clpDurationYears * 12 : 0
-            };
-        };
-
-        const allExitPrices = Array.from(new Set([
-            userSelections.selectedExitPrice,
-            ...userSelections.scenarioExitPrices
-        ])).sort((a, b) => a - b);
-        // 2. Perform All Calculations
-        const propertySize = userSelections.selectedPropertySize;
-        const detailedBreakdown = calculateFinancials(propertySize, userSelections.selectedExitPrice, propertyData.assumptions.investmentPeriod);
-        const comparisonTargetPrice = userSelections.scenarioExitPrices?.[0] || 0;
-        const scenarioBreakdown = calculateFinancials(propertySize, comparisonTargetPrice, propertyData.assumptions.investmentPeriod);
-
-        const profits = allExitPrices.map(price => {
-            const breakdown = calculateFinancials(propertySize, price, propertyData.assumptions.investmentPeriod);
-            return {
-                exitPrice: price,
-                saleValue: breakdown.saleValue,
-                netProfit: breakdown.netGainLoss,
-
-                // ✅ FIX: Use the calculated ROI from the breakdown object
-                roi: breakdown.roi,
-
-                appreciation: ((price - propertyData.purchasePrice) / propertyData.purchasePrice) * 100,
-                cashInvested: breakdown.totalCashInvested,
-                loanOutstanding: breakdown.totalLoanOutstanding
-            };
-        });
-
-        const multipleScenarios = allExitPrices.map(price => {
-            const breakdown = calculateFinancials(propertySize, price, propertyData.assumptions.investmentPeriod);
-            return {
-                exitPrice: price,
-                saleValue: breakdown.saleValue,
-                netProfit: breakdown.netGainLoss,
-                roi: breakdown.roi,
-                appreciation: ((price - propertyData.purchasePrice) / propertyData.purchasePrice) * 100,
-                cashInvested: breakdown.totalCashInvested,
-                loanOutstanding: breakdown.totalLoanOutstanding,
-                leftoverCash: breakdown.leftoverCash,
-                totalEMIPaid: breakdown.totalEMIPaid,
-                isSelected: price === userSelections.selectedExitPrice
-            };
-        });
-
-        // 3. Stage Wise Data Preparation
-        const stageCalculations = {
-            stage1: {
-                title: "Stage 1: Basic Property Cost",
-                items: [
-                    { label: "Property Size", value: `${propertySize} sq.ft` },
-                    { label: "Purchase Price", value: `₹${propertyData.purchasePrice}/sq.ft` },
-                    { label: "Other Charges", value: `₹${propertyData.otherCharges}/sq.ft` },
-                    { label: "Stamp Duty", value: formatCurrency(detailedBreakdown.stampDutyCost) },
-                    { label: "GST charges", value: formatCurrency(detailedBreakdown.gstCost) },
-                    { label: "Total Property Cost", value: formatCurrency(detailedBreakdown.totalCost) }
-                ]
-            },
-            stage2: {
-                title: "Stage 2: Payment Plan Breakdown",
-                items: [
-                    { label: "Down Payment", value: `${detailedBreakdown.downPaymentShare}% (${formatCurrency(detailedBreakdown.downPaymentAmount)})` },
-                    { label: "Home Loan", value: `${detailedBreakdown.homeLoanShare}% (${formatCurrency(detailedBreakdown.homeLoanAmount)})` },
-                    { label: "PL1", value: `${detailedBreakdown.personalLoan1Share}% (${formatCurrency(detailedBreakdown.personalLoan1Amount)})` },
-                    { label: "PL2", value: `${detailedBreakdown.personalLoan2Share}% (${formatCurrency(detailedBreakdown.personalLoan2Amount)})` },
-                    { label: "Total PL Amount", value: formatCurrency(detailedBreakdown.totalCashInvested) }
-                ]
-            },
-            stage3: {
-                title: "Stage 3: EMI Calculations",
-                items: [
-                    { label: "Home Loan EMI", value: `${formatCurrency(detailedBreakdown.homeLoanEMI)}/month` },
-                    { label: "PL1 EMI", value: `${formatCurrency(detailedBreakdown.personalLoan1EMI)}/month` },
-                    { label: "PL2 EMI", value: `${formatCurrency(detailedBreakdown.personalLoan2EMI)}/month` },
-                    { label: "Total Monthly", value: `${formatCurrency(detailedBreakdown.homeLoanEMI + detailedBreakdown.personalLoan1EMI + detailedBreakdown.personalLoan2EMI)}/month` }
-                ]
-            },
-            stage4: {
-                title: "Stage 4: Holding Period",
-                items: [
-                    { label: "Duration", value: `${detailedBreakdown.years || 0} years (${detailedBreakdown.totalHoldingMonths} months)` },
-                    { label: "Possession", value: `After ${detailedBreakdown.possessionMonths} months` },
-                    { label: "Exit Price", value: `₹${userSelections.selectedExitPrice}/sq.ft` },
-                    { label: "Sale Value", value: formatCurrency(detailedBreakdown.saleValue) }
-                ]
-            }
-        };
-
-        return { profits, detailedBreakdown, scenarioBreakdown, multipleScenarios, stageCalculations };
-
-    }, [propertyData, userSelections]); // Dependencies: Runs ONLY when inputs change
+    // Initialize with empty/null structure so the UI doesn't crash on load
+    const [calculatedData, setCalculatedData] = useState({
+        detailedBreakdown: null,
+        profits: [],
+        multipleScenarios: [],
+        stageCalculations: null
+    }); // Dependencies: Runs ONLY when inputs change
     // ===================== EVENT HANDLERS =====================
 
     const handleSelectionUpdate = (field, value) => {
@@ -1452,32 +1009,76 @@ const PropertyComparisonDesktop = () => {
         </div>
     );
 
-    const handleAnalyzeClick = () => {
-        // 1. Start Loading Animation
+    const handleAnalyzeClick = async (targetTab = 'overview') => {
+        // 1. Start Loading
         setIsProcessing(true);
-        setLoadingMessage("Analyzing Property Parameters...");
+        setLoadingMessage("Connecting to Analysis Engine...");
 
-        // 2. Wait 1.5 seconds before showing results
-        setTimeout(() => {
-            // A. Switch to Overview Tab
-            setActiveTab('overview');
+        try {
+            // 2. Prepare Data for Backend
+            const payload = {
+                purchasePrice: parseFloat(propertyData.purchasePrice),
+                otherCharges: parseFloat(propertyData.otherCharges),
+                stampDuty: parseFloat(propertyData.stampDuty),
+                gstPercentage: parseFloat(propertyData.gstPercentage),
+                paymentPlan: propertyData.paymentPlan,
+                assumptions: propertyData.assumptions,
+                selectedProperty: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId),
+                selectedExitPrice: parseFloat(userSelections.selectedExitPrice),
 
-            // B. Stop Loading
+                // ✅ FIX 1: Send the scenario list so the backend can generate the Chart & Table
+                scenarioExitPrices: userSelections.scenarioExitPrices.map(p => parseFloat(p))
+            };
+
+            // 3. Call the Node.js API
+            // ✅ Add "/api/calculate" at the end
+            const response = await axios.post('https://property-backend-woad.vercel.app/api/calculate', payload);
+            if (response.data.success) {
+                const serverResult = response.data.data;
+
+                // 4. Update React State
+                // ✅ FIX 2: Use the full object from server (Profits, Scenarios, Stages)
+                setCalculatedData({
+                    detailedBreakdown: serverResult.detailedBreakdown,
+                    profits: serverResult.profits, // Now the Chart will work
+                    multipleScenarios: serverResult.multipleScenarios, // Now the Table will work
+                    stageCalculations: serverResult.stageCalculations // Now the Breakdown cards will work
+                });
+
+                // 5. Success UI Logic
+                setActiveTab(targetTab);
+                setShowDataEnteredAlert(true);
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+
+                setTimeout(() => {
+                    setShowDataEnteredAlert(false);
+                }, 3000);
+            }
+
+        } catch (error) {
+            console.error("Calculation Failed:", error);
+            alert("Server Error: " + (error.response?.data?.error || error.message));
+        } finally {
             setIsProcessing(false);
-
-            // C. Show Success Alert
-            setShowDataEnteredAlert(true);
-
-            // D. Scroll to top to see results
-            window.scrollTo({ top: 0, behavior: 'smooth' });
-
-            // E. Auto-hide alert after 3 seconds
-            setTimeout(() => {
-                setShowDataEnteredAlert(false);
-            }, 3000);
-
-        }, 1500);
+        }
     };
+
+    // ✅ NEW: Auto-Run Analysis if returning from a detail page
+    useEffect(() => {
+        const performAutoAnalysis = async () => {
+            // Check if we are returning from Monthly Breakdown or Schedule
+            if (location.state?.returnTab === 'breakdown') {
+                // Run the analysis and stay on the 'breakdown' tab
+                await handleAnalyzeClick('breakdown');
+
+                // Clean up history so it doesn't run again on refresh
+                navigate(location.pathname, { replace: true, state: {} });
+            }
+        };
+
+        performAutoAnalysis();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     const handlePaymentPlanChange = (plan) => {
         setPropertyData(prev => {
@@ -3225,6 +2826,33 @@ const PropertyComparisonDesktop = () => {
                 />
             );
         }
+        // Helper: Power BI Style Card
+        const DashboardCard = ({ title, value, subtext, icon, color, trend }) => (
+            <div className="card border-0 shadow-sm h-100 position-relative overflow-hidden hover-scale" style={{ borderRadius: '12px', transition: 'transform 0.2s' }}>
+                <div className="card-body p-3">
+                    <div className="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h6 className="text-muted text-uppercase fw-bold mb-1" style={{ fontSize: '0.7rem', letterSpacing: '0.5px' }}>{title}</h6>
+                            <h3 className="fw-bold mb-0 text-dark">{value}</h3>
+                        </div>
+                        <div className={`rounded-circle bg-${color} bg-opacity-10 d-flex align-items-center justify-content-center`} style={{ width: '40px', height: '40px' }}>
+                            <i className={`bi ${icon} text-${color} fs-5`}></i>
+                        </div>
+                    </div>
+                    <div className="d-flex align-items-center mt-2">
+                        {trend && (
+                            <span className={`badge bg-${trend === 'up' ? 'success' : 'danger'} bg-opacity-10 text-${trend === 'up' ? 'success' : 'danger'} me-2 px-2 py-1`} style={{ fontSize: '0.65rem' }}>
+                                <i className={`bi bi-arrow-${trend === 'up' ? 'up' : 'down'}-short`}></i>
+                                {trend === 'up' ? 'Good' : 'High'}
+                            </span>
+                        )}
+                        <small className="text-muted" style={{ fontSize: '0.7rem' }}>{subtext}</small>
+                    </div>
+                </div>
+                {/* Decorative Bottom Line */}
+                <div className={`position-absolute bottom-0 start-0 w-100 bg-${color}`} style={{ height: '4px' }}></div>
+            </div>
+        );
 
         // 2. Main Overview Content
         return (
@@ -3733,19 +3361,13 @@ const PropertyComparisonDesktop = () => {
                                                 className="p-2 rounded border text-dark property-card-hover h-100"
                                                 style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
                                                 onClick={() => handleDelayedNavigation('/monthly-breakdown', {
-                                                    idcSchedule: breakdown.idcSchedule,
-                                                    pl1EMI: breakdown.personalLoan1EMI,
-                                                    possessionMonths: breakdown.possessionMonths,
-                                                    totalHoldingMonths: breakdown.totalHoldingMonths,
-                                                    homeLoanAmount: breakdown.homeLoanAmount,
-                                                    interestRate: propertyData.assumptions.homeLoanRate,
+                                                    // ✅ PASS THE NEW BACKEND DATA
+                                                    monthlyLedger: breakdown.monthlyLedger, // <--- This is the key!
                                                     propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
-                                                    homeLoanTerm: propertyData.assumptions.homeLoanTerm, // e.g., 20 years
-                                                    lastBankDisbursementMonth: getSafeValue(propertyData.assumptions.lastBankDisbursementMonth) || null,
+                                                    homeLoanAmount: breakdown.homeLoanAmount,
                                                     homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
-                                                    manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth),
-                                                    pl1StartMonth: breakdown.pl1StartMonth
-                                                }, "Calculating Monthly Breakdown...")}
+                                                    possessionMonths: breakdown.possessionMonths
+                                                })}
                                             >
                                                 {/* Header Section */}
                                                 <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary border-opacity-10">
@@ -3776,19 +3398,11 @@ const PropertyComparisonDesktop = () => {
                                                     className="p-2 rounded border text-dark property-card-hover h-100"
                                                     style={{ borderStyle: 'dashed', cursor: 'pointer', transition: 'all 0.2s' }}
                                                     onClick={() => handleDelayedNavigation('/schedule', {
-                                                        idcSchedule: breakdown.idcSchedule,
+                                                        // ✅ PASS THE NEW REPORT OBJECT
+                                                        idcReport: breakdown.idcReport,
                                                         pl1EMI: breakdown.personalLoan1EMI,
-                                                        totalIDC: breakdown.totalIDC,
-                                                        totalHoldingMonths: breakdown.totalHoldingMonths,
-                                                        propertyName: propertyData.properties.find(p => p.id === userSelections.selectedPropertyId)?.name,
-                                                        possessionMonths: breakdown.possessionMonths,
-                                                        totalPaid: breakdown.prePossessionTotal,
-                                                        homeLoanAmount: breakdown.homeLoanAmount,
-                                                        lastBankDisbursementMonth: propertyData.assumptions.lastBankDisbursementMonth,
                                                         interestRate: propertyData.assumptions.homeLoanRate,
-                                                        homeLoanStartMode: propertyData.assumptions.homeLoanStartMode,
-                                                        manualStartMonth: getSafeValue(propertyData.assumptions.homeLoanStartMonth)
-                                                    }, "Calculating IDC Slabs...")}
+                                                    })}
                                                 >
                                                     {/* Header Row with Title and Button */}
                                                     <div className="d-flex justify-content-between align-items-center mb-2 pb-1">
@@ -3935,7 +3549,7 @@ const PropertyComparisonDesktop = () => {
                                             Lifetime Commitment
                                         </small>
                                         <div className="fw-bold text-info my-1" style={{ fontSize: '2rem' }}>
-                                            {formatCurrency(breakdown.totalEMIPaid)}
+                                            {formatCurrency(breakdown.prePossessionTotal+breakdown.postPossessionTotal)}
                                         </div>
                                         {breakdown.hasIDC && (
                                             <div className="d-flex align-items-center text-muted">
@@ -3998,10 +3612,10 @@ const PropertyComparisonDesktop = () => {
                                     <thead>
                                         <tr>
                                             <th className="py-3 ps-4 text-start" style={{ width: '30%' }}>Component</th>
-                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Monthly Impact</th>
-                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Total Paid</th>
-                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Interest Cost</th>
-                                            <th className="py-3 text-end pe-4" style={{ width: '17.5%' }}>Balance / Status</th>
+                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Monthly Outflow</th>
+                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Total Cash Paid</th>
+                                            <th className="py-3 text-end" style={{ width: '17.5%' }}>Total Interest Paid</th>
+                                            <th className="py-3 text-end pe-4" style={{ width: '17.5%' }}>Outstanding at Exit</th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -4028,11 +3642,11 @@ const PropertyComparisonDesktop = () => {
                                                 </td>
                                                 <td className="text-end">
                                                     <div className="small text-muted mb-1">100%</div>
-                                                    <div className="fs-5 text-muted">Interest</div>
+                                                    <div className="fs-5 text-muted">{formatLakhs(breakdown.totalIDC)}</div>
                                                 </td>
                                                 <td className="text-end pe-4">
                                                     <div className="small text-muted mb-1">Final Loan Bal</div>
-                                                    <div className="fs-5">{formatLakhs(breakdown.totalHomeLoanAtCompletion + breakdown.totalIDC)}</div>
+                                                    <div className="fs-5">-</div>
                                                 </td>
                                             </tr>
                                         )}
@@ -4044,12 +3658,7 @@ const PropertyComparisonDesktop = () => {
                                                     <i className="bi bi-bank fs-2 text-primary me-3"></i>
                                                     <div>
                                                         <div className="fw-bold">Home Loan</div>
-                                                        <div className="small text-muted">(Principal + Interest)</div>
-                                                        {breakdown.hasIDC && (
-                                                            <span className="badge rounded-pill bg-light text-dark border mt-1 fw-normal" style={{ fontSize: '0.7rem' }}>
-                                                                Includes IDC
-                                                            </span>
-                                                        )}
+                                                        <div className="small text-muted">(Principal)</div>
                                                     </div>
                                                 </div>
                                             </td>
@@ -4067,7 +3676,10 @@ const PropertyComparisonDesktop = () => {
                                             </td>
                                             <td className="text-end pe-4">
                                                 <div className="small text-muted mb-1">Outstanding</div>
-                                                <div className="fs-5">{formatLakhs(breakdown.homeLoanOutstanding)}</div>
+                                                <div className="fs-5">{formatLakhs(
+                                                    (breakdown.homeLoanAmount) -
+                                                    (breakdown.homeLoanEMIPaid - breakdown.homeLoanInterestPaid)
+                                                )}</div>
                                             </td>
                                         </tr>
 
@@ -4097,7 +3709,10 @@ const PropertyComparisonDesktop = () => {
                                                 </td>
                                                 <td className="text-end pe-4">
                                                     <div className="small text-muted mb-1">Outstanding</div>
-                                                    <div className="fs-5">{formatCurrency(breakdown.personalLoan1Outstanding)}</div>
+                                                    <div className="fs-5">{formatLakhs(
+                                                        breakdown.personalLoan1Amount -
+                                                        (breakdown.personalLoan1EMIPaid - breakdown.personalLoan1InterestPaid)
+                                                    )}</div>
                                                 </td>
                                             </tr>
                                         )}
@@ -4128,7 +3743,10 @@ const PropertyComparisonDesktop = () => {
                                                 </td>
                                                 <td className="text-end pe-4">
                                                     <div className="small text-muted mb-1">Outstanding</div>
-                                                    <div className="fs-5">{formatCurrency(breakdown.personalLoan2Outstanding)}</div>
+                                                    <div className="fs-5">{formatLakhs(
+                                                        breakdown.personalLoan2Amount -
+                                                        (breakdown.personalLoan2EMIPaid - breakdown.personalLoan2InterestPaid)
+                                                    )}</div>
                                                 </td>
                                             </tr>
                                         )}
@@ -4627,7 +4245,7 @@ const PropertyComparisonDesktop = () => {
                                     <tr>
                                         <td className="text-start">Personal Loan 2</td>
                                         <td>{formatCurrency(bd.personalLoan2EMI)}</td>
-                                        <td>Month {bd.pl2StartMonth}</td>
+                                        <td>Month {bd.pl2StartMonth+1}</td>
                                         <td>{formatCurrency(bd.personalLoan2EMIPaid)}</td>
                                     </tr>
                                 )}
@@ -4844,7 +4462,7 @@ const PropertyComparisonDesktop = () => {
                     style={{ zIndex: 1050, width: '400px', maxWidth: '85vw' }}
                 >
                     {/* === HEADER === */}
-                    <div className="p-4 border-bottom bg-light">
+                    <div className="p-4 border-bottom bg-light bg-opacity-">
                         <div className="d-flex justify-content-between align-items-center mb-0">
                             <div>
                                 <h5 className="mb-1 fw-bold">
@@ -4872,7 +4490,7 @@ const PropertyComparisonDesktop = () => {
                     </div>
 
                     {/* === LIST BODY === */}
-                    <div className="flex-grow-1 overflow-auto p-3" style={{ background: '#f8f9fa' }}>
+                    <div className="flex-grow-1 overflow-auto p-3 bg-light">
                         {isLoadingData ? (
                             <div className="text-center mt-5">
                                 <div className="spinner-border text-primary" role="status"></div>
@@ -4923,16 +4541,16 @@ const PropertyComparisonDesktop = () => {
                                                 {/* Price Context Row */}
                                                 <div className="d-flex align-items-center justify-content-between bg-light rounded px-2 py-1 mb-2 mt-2 border border-light" style={{ fontSize: '0.7rem' }}>
                                                     <div className="text-muted d-flex align-items-center">
-                                                        <span className="opacity-50 me-1">Buy:</span>
-                                                        <span className="fw-bold text-dark">{formatLakhs(item.metrics.totalCost)}</span>
+                                                        <span className="opacity-75 me-1">Buy:</span>
+                                                        <span className="fw-bold">{formatLakhs(item.metrics.totalCost)}</span>
                                                     </div>
                                                     <div className="text-muted d-flex align-items-center">
                                                         <span className="opacity-25 mx-1">|</span>
                                                     </div>
                                                     <div className="text-muted d-flex align-items-center">
-                                                        <span className="opacity-50 me-1">Sell:</span>
+                                                        <span className="opacity-75 me-1">Sell:</span>
                                                         {/* ✅ DISPLAY CALCULATED TOTAL */}
-                                                        <span className="fw-bold text-dark">{formatLakhs(totalSellValue)}</span>
+                                                        <span className="fw-bold">{formatLakhs(totalSellValue)}</span>
                                                     </div>
                                                 </div>
 

@@ -6,36 +6,17 @@ const IdcSchedulePage = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  // 1. Retrieve Data
+  // ✅ RECEIVE DATA DIRECTLY FROM BACKEND
   const {
-    idcSchedule,
+    idcReport, // <--- The pre-calculated report
     pl1EMI,
-    possessionMonths,
-    homeLoanAmount = 0,
-    totalHoldingMonths,
-    lastBankDisbursementMonth,
-    interestRate = 9.0,
-    homeLoanStartMode,
-    manualStartMonth
+    interestRate
   } = location.state || {};
 
-  const formatCurrency = (value) =>
-    (!value && value !== 0) ? '₹0' : `₹${Math.round(value).toLocaleString()}`;
+  const formatCurrency = (val) =>
+    (!val && val !== 0) ? '₹0' : `₹${Math.round(val).toLocaleString('en-IN')}`;
 
-  // --- NEW LOGIC: Define Interest End Point ---
-  // Default is Possession. 
-  // If Last Disbursement Month is set (Smart Saver), interest stops there.
-  let interestEndMonth = possessionMonths;
-
-  if (lastBankDisbursementMonth) {
-    interestEndMonth = parseInt(lastBankDisbursementMonth);
-  }
-  // Also check Manual Start (overrides if present)
-  if (location.state?.homeLoanStartMode === 'manual' && location.state?.manualStartMonth) {
-    interestEndMonth = parseInt(location.state.manualStartMonth) - 1;
-  }
-
-  if (!idcSchedule) {
+  if (!idcReport || !idcReport.schedule) {
     return (
       <div className="container py-5 text-center">
         <h3>No Data Found</h3>
@@ -46,62 +27,11 @@ const IdcSchedulePage = () => {
     );
   }
 
-  // ==========================================
-  // ⚙️ LOGIC: ALIGNED WITH MONTHLY BREAKDOWN
-  // ==========================================
+  // Destructure for ease
+  const { schedule, grandTotalInterest, minMonthlyInterest, maxMonthlyInterest, cutoffMonth } = idcReport;
 
-  // 1. ✅ CRITICAL FIX: Calculate Slab Amount Robustly
-  // We strictly divide the Total Loan by the Number of Slabs in the schedule.
-  // This ensures that if the schedule is compressed to 6 slabs (18 months), 
-  // the slab amount correctly increases (e.g., 16L / 6 = ₹2.66L).
-  const disbursementPerSlab = idcSchedule.length > 0 ? homeLoanAmount / idcSchedule.length : 0;
-
-  // 2. Determine Cutoff Limits
-  const holdingLimit = totalHoldingMonths ? parseInt(totalHoldingMonths) : possessionMonths;
-
-  const derivedLastMonth = idcSchedule.length > 0
-    ? Math.max(...idcSchedule.map(s => s.releaseMonth))
-    : possessionMonths;
-
-  const fundingEndMonth = lastBankDisbursementMonth
-    ? parseInt(lastBankDisbursementMonth)
-    : derivedLastMonth;
-
-  // --- NEW LOGIC: DETERMINE INTEREST CUTOFF ---
-  // If Manual Mode (Smart Saver), interest stops BEFORE the Home Loan EMI starts.
-  // Otherwise, it stops at Possession.
-  let interestCutoffMonth = possessionMonths;
-  if (homeLoanStartMode === 'manual' && manualStartMonth) {
-    // OLD: interestCutoffMonth = parseInt(manualStartMonth) - 1; (Stops at 18)
-
-    // NEW: Allow interest for the 18th month itself.
-    // If EMI starts M19, IDC runs M1 to M18.
-    interestCutoffMonth = parseInt(manualStartMonth);
-  }
-
-  // 3. Filter Schedule (Visual Cutoff only)
-  const cutoffMonth = Math.min(fundingEndMonth, holdingLimit);
-  const filteredSchedule = idcSchedule.filter(row => row.releaseMonth <= cutoffMonth);
-
-  // 4. Calculate Interest Variables
-  // Base Interest = (Slab Amount * Rate) / 12
-  const baseSlabInterest = disbursementPerSlab * (interestRate / 100) / 12;
-
-  // 5. Calculate Grand Total (Summing row-by-row for precision)
-  const grandTotalInterest = filteredSchedule.reduce((acc, row) => {
-
-    // STOPPER: If slab is released AFTER the cutoff, 0 Interest.
-    if (row.releaseMonth > interestEndMonth) return acc;
-
-    // FIX: Calculate duration up to 'interestEndMonth', NOT 'possessionMonths'
-    const duration = Math.max(0, interestEndMonth - row.releaseMonth + 1);
-
-    return acc + (baseSlabInterest * duration);
-  }, 0);
-
-  // 6. Summary Stats
-  const minMonthlyInterest = filteredSchedule.length > 0 ? baseSlabInterest : 0;
-  const maxMonthlyInterest = baseSlabInterest * filteredSchedule.length;
+  // Filter if needed (Backend should already filter, but safety check)
+  const filteredSchedule = schedule.filter(row => row.releaseMonth <= cutoffMonth);
 
   return (
     <div className="property-comparison" style={{ minHeight: '100vh', position: 'relative' }}>
@@ -202,13 +132,7 @@ const IdcSchedulePage = () => {
                   <th className="py-3 text-center bg-light">Month<br /><small className="text-muted fw-normal">(from booking)</small></th>
                   <th className="py-3 text-end bg-light text-info">Disbursement (₹)</th>
                   <th className="py-3 text-center bg-light">Rate</th>
-                  <th className="py-3 text-center bg-light">
-                    {interestEndMonth < possessionMonths ? (
-                      <>Interest<br />Duration (Mos)</>
-                    ) : (
-                      <>Months to<br />Possession</>
-                    )}
-                  </th>
+                  <th className="py-3 text-center bg-light">Interest Duration (Mos)</th>
                   <th className="py-3 text-end bg-light text-warning">Monthly<br />Interest (₹)</th>
                   <th className="py-3 text-end text-white" style={{ background: 'var(--brand-color)' }}>Total IDC (₹)</th>
                 </tr>
@@ -216,31 +140,18 @@ const IdcSchedulePage = () => {
               <tbody>
                 {filteredSchedule.length > 0 ? (
                   filteredSchedule.map((row, idx) => {
-
-                    // FIX: Use 'interestEndMonth' instead of 'possessionMonths'
-                    // Also check if release is valid
-                    let interestDuration = 0;
-                    if (row.releaseMonth <= interestEndMonth) {
-                      interestDuration = Math.max(0, interestEndMonth - row.releaseMonth + 1);
-                    }
-
-                    // Cumulative Monthly Interest = Base Interest * Active Slabs (idx + 1)
-                    const cumulativeMonthlyInterest = baseSlabInterest * (idx + 1);
-
-                    // Total Cost for this specific slab
-                    const totalCostForSlab = baseSlabInterest * interestDuration;
                     return (
                       <tr key={idx}>
                         <td className="text-center fw-bold text-muted">{row.slabNo}</td>
                         <td className="text-center fw-bold">{row.releaseMonth}</td>
-                        <td className="text-end fw-bold text-info">{formatCurrency(disbursementPerSlab)}</td>
+                        <td className="text-end fw-bold text-info">{formatCurrency(row.amount)}</td>
                         <td className="text-center small text-muted">{Number(interestRate).toFixed(2)}%</td>
-                        <td className="text-center fw-bold text-secondary">{interestDuration}</td>
+                        <td className="text-center fw-bold text-secondary">{row.duration}</td>
                         <td className="text-end fw-bold text-warning" style={{ background: 'rgba(255, 193, 7, 0.05)' }}>
-                          {formatCurrency(cumulativeMonthlyInterest)}
+                          {formatCurrency(row.cumulativeMonthlyInterest)}
                         </td>
                         <td className="text-end fw-bold text-white" style={{ background: 'var(--brand-color)' }}>
-                          {formatCurrency(totalCostForSlab)}
+                          {formatCurrency(row.totalCostForSlab)}
                         </td>
                       </tr>
                     );
