@@ -289,14 +289,8 @@ function Auth() {
             <div className="row g-2">
               <div className="col-12">
                 <small className="text-muted">
-                  <i className="fas fa-shield-alt me-1"></i>
-                  Your data is secure and protected
-                </small>
-              </div>
-              <div className="col-12">
-                <small className="text-muted">
                   <i className="fas fa-info-circle me-1"></i>
-                  {isLogin ? 'Need help signing in?' : 'Use a strong password for security'}
+                  {isLogin ? 'Your data is secure and protected' : 'Use a strong password for security'}
                 </small>
               </div>
               <div className="col-12">

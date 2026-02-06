@@ -66,7 +66,7 @@ const INITIAL_USER_SELECTIONS = {
 
 // ===================== UTILITIES =====================
 const formatLakhs = (value) => (!value && value !== 0) ? '₹0L' : `₹${(value / 100000).toFixed(2)}L`;
-const formatCurrency = (value) => (!value && value !== 0) ? '₹0' : `₹${Math.round(value).toLocaleString()}`;
+const formatCurrency = (value) => (!value && value !== 0) ? '₹0' : `₹${Math.round(value).toLocaleString('en-IN')}`;
 const formatPercent = (value) => (!value && value !== 0) ? '0%' : `${value.toFixed(1)}%`;
 const getSafeValue = (value) => (value === '' || value === null || isNaN(value)) ? 0 : parseFloat(value);
 
@@ -174,10 +174,10 @@ const MobileTimelineAccordion = ({ breakdown, onViewSchedule, onViewMonthlyBreak
 
     // Calculate Totals for Display
     // 1. Pre-Possession Total is usually just the EMI * months (approx) or the exact total from backend if available
-    const prePossessionTotalValue = breakdown.prePossessionEMI * breakdown.prePossessionMonths;
+    const prePossessionTotalValue = breakdown.prePossessionTotal;
 
     // 2. Post-Possession Total = Monthly EMI * Remaining Months
-    const postPossessionTotalValue = breakdown.postPossessionEMI * breakdown.postPossessionMonths;
+    const postPossessionTotalValue = breakdown.postPossessionTotal;
 
     // Reusable Accordion Item
     const AccordionItem = ({ id, title, subtitle, amount, totalLabel, totalValue, color, icon, children }) => {
@@ -550,22 +550,27 @@ const PropertyComparisonMobile = () => {
         // 1. Copy the array
         const newProperties = [...propertyData.properties];
 
-        // 2. Parse the value
+        // 2. Parse the value (Keep numbers as numbers, text as text)
         const newValue = (field === 'name' || field === 'location') ? value : parseFloat(value) || '';
 
-        // 3. ✅ CRITICAL FIX: Create a NEW object for the specific property
-        // (This prevents overwriting the INITIAL_PROPERTY_DATA constant)
+        // 3. Update the specific property in the list
         newProperties[index] = {
             ...newProperties[index],
             [field]: newValue
         };
 
-        // 4. Update state
+        // 4. Update the main state
         setPropertyData(prev => ({ ...prev, properties: newProperties }));
 
-        // 5. Update selection if needed
-        if (newProperties[index].id === userSelections.selectedPropertyId && field === 'size') {
-            setUserSelections(prev => ({ ...prev, selectedPropertySize: newValue }));
+        // 5. ✅ CRITICAL FIX: Sync "Active Selection" immediately
+        // If we are editing the property that is currently selected in the dropdown...
+        if (newProperties[index].id === userSelections.selectedPropertyId) {
+            // If editing Size, update selectedPropertySize
+            if (field === 'size') {
+                setUserSelections(prev => ({ ...prev, selectedPropertySize: newValue }));
+            }
+            // If editing Possession, force re-render/validation trigger if needed
+            // (React handles this automatically via state, but size is special because it's duplicated in userSelections)
         }
     };
 
@@ -577,26 +582,32 @@ const PropertyComparisonMobile = () => {
     };
 
     const handleAddProperty = () => {
-        // 1. FIX: Find the highest ID currently in the list
-        // If list is empty, start at 0 (so next is 1). If not, take the max ID found.
+        // 1. Find max ID
         const maxId = propertyData.properties.reduce((max, prop) => (prop.id > max ? prop.id : max), 0);
-
-        // 2. Generate new unique ID
         const newId = maxId + 1;
 
+        // 2. Create new property with EMPTY fields (Don't pre-fill 1000)
         const newProperty = {
             id: newId,
-            size: 1000,
+            size: '', // ✅ Change 1000 to '' so validation forces user to enter it
             name: `Property ${newId}`,
             location: '',
-            // rating: 4.0, // (Optional based on your existing object structure)
-            // isHighlighted: false,
-            possessionMonths: 24
+            possessionMonths: '' // ✅ Don't assume 24 months
         };
 
+        // 3. Update the List
         setPropertyData(prev => ({
             ...prev,
             properties: [...prev.properties, newProperty]
+        }));
+
+        // 4. ✅ CRITICAL FIX: Automatically select the new property
+        // This ensures the validator checks THIS property, not the old one.
+        setUserSelections(prev => ({
+            ...prev,
+            selectedPropertyId: newId,
+            selectedPropertySize: '',
+            scenarioSize: ''
         }));
     };
 
@@ -698,21 +709,103 @@ const PropertyComparisonMobile = () => {
 
     const validateCurrentStep = () => {
         let isValid = true;
-        const currentProp = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId);
-        const isEmpty = (val) => val === '' || val === null || val === undefined || val === 0;
+        let errorMsg = '';
 
+        // Helper to check for empty values
+        const isEmpty = (val) => val === '' || val === null || val === undefined || val === 0 || Number.isNaN(val);
+
+        // Find the currently selected property object
+        const currentProp = propertyData.properties.find(p => p.id === userSelections.selectedPropertyId);
+
+        // --- STEP 1: PROPERTY DETAILS ---
         if (currentStep === 1) {
-            if (!currentProp?.name || !currentProp?.location || isEmpty(currentProp?.size) || isEmpty(propertyData.purchasePrice)) isValid = false;
-        } else if (currentStep === 2) {
-            if (isEmpty(propertyData.assumptions.investmentPeriod)) isValid = false;
-            if (propertyData.paymentPlan === 'clp' && (isEmpty(propertyData.assumptions.clpDurationYears) || isEmpty(propertyData.assumptions.bankDisbursementInterval))) isValid = false;
-        } else if (currentStep === 3) {
-            if (isEmpty(propertyData.assumptions.homeLoanRate) || isEmpty(propertyData.assumptions.homeLoanTerm)) isValid = false;
+            if (!currentProp?.name) { isValid = false; errorMsg = 'Please enter a Property Name.'; }
+            else if (!currentProp?.location) { isValid = false; errorMsg = 'Please enter a Location.'; }
+            else if (isEmpty(currentProp?.size)) { isValid = false; errorMsg = 'Please enter Property Size.'; }
+            else if (isEmpty(propertyData.purchasePrice)) { isValid = false; errorMsg = 'Please enter Purchase Price.'; }
         }
 
+        // --- STEP 2: PAYMENT PLAN & TIMELINE ---
+        else if (currentStep === 2) {
+            // Check Holding Period
+            if (isEmpty(propertyData.assumptions.investmentPeriod) || propertyData.assumptions.investmentPeriod <= 0) {
+                isValid = false; errorMsg = 'Please enter a valid Holding Period (Years).';
+            }
+            // Check Custom Plan Total (Must be 100%)
+            else if (propertyData.paymentPlan === 'custom') {
+                const total = getSafeValue(propertyData.assumptions.downPaymentShare) +
+                    getSafeValue(propertyData.assumptions.personalLoan1Share) +
+                    getSafeValue(propertyData.assumptions.personalLoan2Share) +
+                    getSafeValue(propertyData.assumptions.homeLoanShare);
+                if (total !== 100) { isValid = false; errorMsg = `Total allocation is ${total}%. It must be exactly 100%.`; }
+            }
+            // Check CLP Specifics
+            if (propertyData.paymentPlan === 'clp') {
+                if (isEmpty(propertyData.assumptions.clpDurationYears)) {
+                    isValid = false; errorMsg = 'Please enter Construction Duration.';
+                }
+                else if (isEmpty(propertyData.assumptions.bankDisbursementInterval)) {
+                    isValid = false; errorMsg = 'Please enter Disbursement Interval.';
+                }
+                else {
+                    // Logic Check: Construction vs Possession
+                    const constructionMonths = parseFloat(propertyData.assumptions.clpDurationYears) * 12;
+                    const possessionMonths = parseFloat(currentProp?.possessionMonths || 0);
+
+                    if (constructionMonths > possessionMonths) {
+                        isValid = false;
+                        errorMsg = `Error: Construction (${constructionMonths}m) cannot exceed Possession (${possessionMonths}m).`;
+                    }
+                }
+            }
+        }
+
+        // --- STEP 3: LOAN CONFIGURATION ---
+        else if (currentStep === 3) {
+            // Check Possession (Required unless Ready-to-Move)
+            if (isEmpty(currentProp?.possessionMonths) && propertyData.paymentPlan !== 'rtm') {
+                isValid = false; errorMsg = 'Please enter Possession Months (in Step 1).';
+            }
+            // Basic Home Loan Checks
+            else if (isEmpty(propertyData.assumptions.homeLoanRate)) { isValid = false; errorMsg = 'Please enter Home Loan Rate.'; }
+            else if (isEmpty(propertyData.assumptions.homeLoanTerm)) { isValid = false; errorMsg = 'Please enter Home Loan Term.'; }
+
+            // Check Personal Loan 1 (Only if Share > 0)
+            if (getSafeValue(propertyData.assumptions.personalLoan1Share) > 0) {
+                if (isEmpty(propertyData.assumptions.personalLoan1Rate)) {
+                    isValid = false; errorMsg = 'Please enter Personal Loan 1 Rate.';
+                } else if (isEmpty(propertyData.assumptions.personalLoan1Term)) {
+                    isValid = false; errorMsg = 'Please enter Personal Loan 1 Tenure.';
+                }
+            }
+
+            // Check Personal Loan 2 (Only if Share > 0)
+            if (getSafeValue(propertyData.assumptions.personalLoan2Share) > 0) {
+                if (isEmpty(propertyData.assumptions.personalLoan2Rate)) {
+                    isValid = false; errorMsg = 'Please enter Personal Loan 2 Rate.';
+                } else if (isEmpty(propertyData.assumptions.personalLoan2Term)) {
+                    isValid = false; errorMsg = 'Please enter Personal Loan 2 Tenure.';
+                }
+            }
+        }
+
+        // --- STEP 4: EXIT SCENARIOS ---
+        else if (currentStep === 4) {
+            const selectedPrice = userSelections.selectedExitPrice;
+            const scenarioPrices = userSelections.scenarioExitPrices;
+
+            if (isEmpty(selectedPrice)) { isValid = false; errorMsg = 'Please enter a Selected Exit Price.'; }
+            else if (scenarioPrices.includes(selectedPrice)) { isValid = false; errorMsg = `Selected Price (${selectedPrice}) cannot be a Scenario Price.`; }
+            else if (new Set(scenarioPrices).size !== scenarioPrices.length) { isValid = false; errorMsg = 'Scenario Prices must be unique.'; }
+        }
+
+        // --- HANDLE VALIDATION RESULT ---
         if (!isValid) {
-            setValidationError('Please fill required fields *');
-            setTimeout(() => setValidationError(''), 3000);
+            setValidationError(errorMsg);
+            // Clear error after 4 seconds
+            setTimeout(() => setValidationError(''), 4000);
+        } else {
+            setValidationError('');
         }
         return isValid;
     };
@@ -2213,40 +2306,73 @@ const PropertyComparisonMobile = () => {
                 <div style={{ maxWidth: '768px', margin: '0 auto' }}>
                     {/* 2x2 Grid Layout (Consolidated Card Style) */}
                     <div className="card border-0 shadow-sm mb-4 overflow-hidden" style={{ borderRadius: '16px' }}>
-                        <div className="row g-0">
+                        <div className="row g-3 mb-4 p-3">
 
                             {/* 1. Total Cost (Top Left) */}
-                            <div className="col-6 p-3 border-end border-bottom text-center">
-                                <i className="bi bi-cash-stack fs-3 text-primary mb-2 d-block"></i>
-                                <small className="text-muted fw-bold d-block mb-1" style={{ fontSize: '0.7rem' }}>Total Cost</small>
-                                <h5 className="fw-bold mb-0">{formatLakhs(breakdown.totalCost)}</h5>
-                            </div>
-
-                            {/* 2. Net Profit (Top Right) - Swapped Holding Period for Profit to match Image */}
-                            <div className="col-6 p-3 border-bottom text-center">
-                                <i className={`bi bi-graph-up-arrow fs-3 mb-2 d-block ${breakdown.netGainLoss >= 0 ? 'text-success' : 'text-danger'}`}></i>
-                                <small className="text-muted fw-bold d-block mb-1" style={{ fontSize: '0.7rem' }}>Net Profit</small>
-                                <h5 className={`fw-bold mb-0 ${breakdown.netGainLoss >= 0 ? 'text-success' : 'text-danger'}`}>
-                                    {formatLakhs(breakdown.netGainLoss)}
-                                </h5>
-                            </div>
-
-                            {/* 3. ROI (Bottom Left) */}
-                            <div className="col-6 p-3 border-end text-center">
-                                <div className="d-flex align-items-center justify-content-center mb-2">
-                                    <i className="bi bi-percent fs-3 text-primary"></i>
+                            {/* 1. Total Cost */}
+                            <div className="col-6">
+                                <div className="p-3 h-100 rounded-4 shadow-sm border border-light"
+                                    style={{ backgroundColor: '#f0f9ff' }}> {/* Soft Blue bg */}
+                                    <div className="d-flex align-items-center mb-2">
+                                        <div className="rounded-circle bg-white p-1 d-flex align-items-center justify-content-center shadow-sm"
+                                            style={{ width: '32px', height: '32px' }}>
+                                            <i className="bi bi-tag-fill text-primary small"></i>
+                                        </div>
+                                        <small className="text-muted fw-bold ms-2" style={{ fontSize: '0.65rem', textTransform: 'uppercase' }}>Total Cost</small>
+                                    </div>
+                                    <h5 className="fw-bold mb-0 text-dark">{formatLakhs(breakdown.totalCost)}</h5>
                                 </div>
-                                <small className="text-muted fw-bold d-block mb-1" style={{ fontSize: '0.7rem' }}>ROI</small>
-                                <h5 className="fw-bold mb-0 text-primary">{formatPercent(breakdown.roi)}</h5>
-                                {/* Optional: Show Exit Price if needed */}
-                                {/* <small className="text-muted d-block" style={{fontSize: '0.6rem'}}>@ ₹{breakdown.exitPrice}</small> */}
                             </div>
 
-                            {/* 4. Cash After Sale (Bottom Right) */}
-                            <div className="col-6 p-3 text-center">
-                                <i className="bi bi-wallet2 fs-3 text-info mb-2 d-block"></i>
-                                <small className="text-muted fw-bold d-block mb-1" style={{ fontSize: '0.7rem' }}>Cash-in-Hand</small>
-                                <h5 className="fw-bold mb-0">{formatLakhs(breakdown.leftoverCash)}</h5>
+                            {/* 2. Net Profit */}
+                            <div className="col-6">
+                                <div
+                                    className="p-3 h-100 rounded-4 shadow-sm border border-light"
+                                    style={{
+                                        backgroundColor: breakdown.netGainLoss >= 0 ? '#f0fdf4' : '#fef2f2' // Soft Green or Soft Red
+                                    }}
+                                >
+                                    <div className="d-flex align-items-center mb-2">
+                                        <div className="rounded-circle bg-white p-1 d-flex align-items-center justify-content-center shadow-sm"
+                                            style={{ width: '32px', height: '32px' }}>
+                                            <i className={`bi ${breakdown.netGainLoss >= 0 ? 'bi-graph-up-arrow text-success' : 'bi-graph-down-arrow text-danger'} small`}></i>
+                                        </div>
+                                        <small className={`fw-bold ms-2 ${breakdown.netGainLoss >= 0 ? 'text-success' : 'text-danger'}`} style={{ fontSize: '0.65rem', textTransform: 'uppercase', opacity: 0.8 }}>
+                                            Net Profit
+                                        </small>
+                                    </div>
+                                    <h5 className={`fw-bold mb-0 ${breakdown.netGainLoss >= 0 ? 'text-success' : 'text-danger'}`}>
+                                        {formatLakhs(breakdown.netGainLoss)}
+                                    </h5>
+                                </div>
+                            </div>
+
+                            {/* 3. ROI */}
+                            <div className="col-6">
+                                <div className="p-3 h-100 rounded-4 shadow-sm border border-light" style={{ backgroundColor: '#f5f3ff' }}> {/* Soft Purple/Indigo */}
+                                    <div className="d-flex align-items-center mb-2">
+                                        <div className="rounded-circle bg-white p-1 d-flex align-items-center justify-content-center shadow-sm"
+                                            style={{ width: '32px', height: '32px' }}>
+                                            <i className="bi bi-trophy-fill text-primary small" style={{ color: '#7c3aed' }}></i>
+                                        </div>
+                                        <small className="text-muted fw-bold ms-2" style={{ fontSize: '0.65rem', textTransform: 'uppercase' }}>ROI</small>
+                                    </div>
+                                    <h5 className="fw-bold mb-0" style={{ color: '#7c3aed' }}>{formatPercent(breakdown.roi)}</h5>
+                                </div>
+                            </div>
+
+                            {/* 4. Cash After Sale */}
+                            <div className="col-6">
+                                <div className="p-3 h-100 rounded-4 shadow-sm border border-light" style={{ backgroundColor: '#fffbeb' }}> {/* Soft Orange/Yellow */}
+                                    <div className="d-flex align-items-center mb-2">
+                                        <div className="rounded-circle bg-white p-1 d-flex align-items-center justify-content-center shadow-sm"
+                                            style={{ width: '32px', height: '32px' }}>
+                                            <i className="bi bi-wallet-fill text-warning small"></i>
+                                        </div>
+                                        <small className="text-muted fw-bold ms-2" style={{ fontSize: '0.65rem', textTransform: 'uppercase' }}>Cash-in-Hand</small>
+                                    </div>
+                                    <h5 className="fw-bold mb-0 text-dark">{formatLakhs(breakdown.leftoverCash)}</h5>
+                                </div>
                             </div>
                         </div>
                     </div>
