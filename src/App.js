@@ -207,10 +207,6 @@ function App() {
                   <p className="app-subtitle">
                     Strategic Investment Insights • By <strong>Agenthum AI Solutions</strong>
                   </p>
-                  <div className="environment-badge">
-                    {config.isProduction() && <span className="badge bg-success ms-2">Production</span>}
-                    {config.isDevelopment() && <span className="badge bg-warning ms-2">Development</span>}
-                  </div>
                 </div>
               </div>
 
@@ -426,8 +422,7 @@ function App() {
             <div className="opacity-50" style={{ fontSize: '0.8rem', fontFamily: 'monospace' }}>
               <span className="me-3"><i className="bi bi-telephone-fill me-1"></i>+91 955 582 1832</span>
               <span>
-                v{config.version} • {config.isProduction() ? 'Production' : 'Dev'} Env
-                {process.env.NODE_ENV === 'development' && ` • Build: ${new Date().toLocaleTimeString()}`}
+                v{config.version}
               </span>
             </div>
           </div>
