@@ -166,11 +166,6 @@ function App() {
             <span className="visually-hidden">Loading...</span>
           </div>
           <p className="mt-3">Loading Property Investment Analyzer...</p>
-          <small className="text-muted d-block mt-2">
-            Environment: {process.env.NODE_ENV} |
-            Firebase: {auth ? 'Initialized' : 'Loading...'} |
-            Theme: {theme}
-          </small>
         </div>
       </div>
     );
